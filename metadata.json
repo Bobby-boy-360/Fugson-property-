@@ -1,0 +1,6 @@
+{
+  "name": "Fugson Property",
+  "description": "Foundational property and real estate management portal with passwordless magic link authentication, RBAC admin/agent dashboards, and tenant payment portal. Farm and shortlet modules coming soon.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

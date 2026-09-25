@@ -45,21 +45,21 @@ export function getCurrentUser(): AuthUser | null {
       const data = JSON.parse(cookieVal);
       return {
         id: data.id || 'usr-default',
-        name: data.name || (data.role === 'ADMIN' ? 'Chief Property Admin' : data.role === 'AGENT' ? 'Emeka Nwosu (Agent)' : 'Alabi Adebayo'),
-        email: data.email || (data.role === 'ADMIN' ? 'admin@fugsonproperty.com' : data.role === 'AGENT' ? 'emeka@fugsonproperty.com' : 'alabi.adebayo@example.com'),
+        name: data.name || (data.role === 'ADMIN' ? 'Property Administrator' : data.role === 'AGENT' ? 'Field Agent' : 'Registered Tenant'),
+        email: data.email || (data.role === 'ADMIN' ? 'admin@fugsonproperty.com' : data.role === 'AGENT' ? 'agent@fugsonproperty.com' : 'tenant@fugsonproperty.com'),
         role: data.role as UserRole,
         avatarUrl: data.avatarUrl,
-        assignedPropertiesCount: data.assignedPropertiesCount || 3,
+        assignedPropertiesCount: data.assignedPropertiesCount || 0,
         tenantId: data.tenantId,
       };
     } else {
       const role = cookieVal.toUpperCase() as UserRole;
       return {
         id: role === 'ADMIN' ? 'usr-admin' : role === 'AGENT' ? 'usr-agent' : 'tenant-01',
-        name: role === 'ADMIN' ? 'Chief Property Admin' : role === 'AGENT' ? 'Emeka Nwosu (Senior Agent)' : 'Alabi Adebayo (Tenant)',
-        email: role === 'ADMIN' ? 'admin@fugsonproperty.com' : role === 'AGENT' ? 'emeka@fugsonproperty.com' : 'alabi.adebayo@example.com',
+        name: role === 'ADMIN' ? 'Property Administrator' : role === 'AGENT' ? 'Field Agent' : 'Registered Tenant',
+        email: role === 'ADMIN' ? 'admin@fugsonproperty.com' : role === 'AGENT' ? 'agent@fugsonproperty.com' : 'tenant@fugsonproperty.com',
         role: role,
-        assignedPropertiesCount: 3,
+        assignedPropertiesCount: 0,
         tenantId: role === 'TENANT' ? 'pay-001' : undefined,
       };
     }
@@ -74,14 +74,14 @@ export function loginAs(role: UserRole, email?: string, tenantId?: string, custo
     name:
       customName ||
       (role === 'ADMIN'
-        ? 'Admin'
+        ? 'Property Administrator'
         : role === 'AGENT'
-        ? 'Emeka Nwosu'
-        : 'Alabi Adebayo'),
-    email: email || (role === 'ADMIN' ? 'admin@fugsonproperty.com' : role === 'AGENT' ? 'emeka@fugsonproperty.com' : 'alabi.adebayo@example.com'),
+        ? 'Field Agent'
+        : 'Registered Tenant'),
+    email: email || (role === 'ADMIN' ? 'admin@fugsonproperty.com' : role === 'AGENT' ? 'agent@fugsonproperty.com' : 'tenant@fugsonproperty.com'),
     role,
     avatarUrl: role === 'ADMIN' ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80' : undefined,
-    assignedPropertiesCount: role === 'AGENT' ? 3 : 5,
+    assignedPropertiesCount: 0,
     tenantId: role === 'TENANT' ? (tenantId || 'pay-001') : undefined,
   };
 

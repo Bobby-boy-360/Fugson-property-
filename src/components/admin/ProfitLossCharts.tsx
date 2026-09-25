@@ -60,12 +60,23 @@ export default function ProfitLossCharts() {
   const [newExpenseCategory, setNewExpenseCategory] = useState<keyof ProfitLossOverheads | 'admin'>('maintenance');
 
   React.useEffect(() => {
-    financeService.getProfitLossData().then(setDataMap);
-  }, []);
+    financeService.getProfitLossData().then((data) => {
+      setDataMap(data || {});
+    });
 
-  if (!dataMap) {
-    return <div className="h-64 flex items-center justify-center text-slate-400">Loading Financials...</div>;
-  }
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('fugson_expenses_v2');
+        localStorage.removeItem('propertypro_expenses');
+        const storedExp = localStorage.getItem('fugson_expenses_v3');
+        if (storedExp) {
+          setExpenses(JSON.parse(storedExp));
+        }
+      } catch (err) {
+        console.error('Failed to load expenses', err);
+      }
+    }
+  }, []);
 
   const handleAddExpense = (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,20 +95,52 @@ export default function ProfitLossCharts() {
       description: newExpenseDesc,
     };
 
-    setExpenses([newLog, ...expenses]);
+    const updated = [newLog, ...expenses];
+    setExpenses(updated);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('fugson_expenses_v3', JSON.stringify(updated));
+      } catch (err) {
+        // ignore
+      }
+    }
     setNewExpenseDesc('');
     setNewExpenseAmount('');
   };
 
   const handleDeleteExpense = (id: string) => {
-    setExpenses(expenses.filter(e => e.id !== id));
+    const updated = expenses.filter(e => e.id !== id);
+    setExpenses(updated);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('fugson_expenses_v3', JSON.stringify(updated));
+      } catch (err) {
+        // ignore
+      }
+    }
   };
 
   // Dynamic calculations based on original + logged expenses
-  const basePL = dataMap[selectedKey];
+  const fallbackPL = {
+    id: 'consolidated',
+    name: 'Consolidated Portfolio',
+    type: 'Entire Portfolio',
+    grossRevenue: 0,
+    overheads: {
+      maintenance: 0,
+      power: 0,
+      internet: 0,
+      cleaningSecurity: 0,
+    },
+    totalOverheads: 0,
+    netProfit: 0,
+    netMargin: 0,
+    notes: 'Operating expense and net yield tracker.',
+  };
+  const basePL = (dataMap && dataMap[selectedKey]) ? dataMap[selectedKey] : fallbackPL;
   const activeExpenses = expenses.filter(e => e.propertyKey === selectedKey || selectedKey === 'consolidated');
   
-  let dynamicOverheads = { ...basePL.overheads };
+  let dynamicOverheads = { ...(basePL.overheads || {}) };
   let additionalAdmin = 0;
   
   activeExpenses.forEach(exp => {
@@ -108,42 +151,42 @@ export default function ProfitLossCharts() {
     }
   });
 
-  const dynamicTotalOverheads = Object.values(dynamicOverheads).reduce((a: any, b: any) => a + b, 0) + additionalAdmin;
-  const grossRevenue = basePL.grossRevenue;
+  const dynamicTotalOverheads = (Object.values(dynamicOverheads) as number[]).reduce((a: number, b: number) => a + b, 0) + additionalAdmin;
+  const grossRevenue = basePL.grossRevenue || 0;
   const netProfit = grossRevenue - dynamicTotalOverheads;
-  const netMargin = ((netProfit / grossRevenue) * 100).toFixed(1);
+  const netMargin = grossRevenue > 0 ? ((netProfit / grossRevenue) * 100).toFixed(1) : '0.0';
 
   // Donut chart data
   const donutData = [
     {
       name: 'Net Operating Profit',
-      value: netProfit,
+      value: Math.max(0, netProfit),
       color: '#12897F', // Brand Teal / Emerald
-      percentage: ((netProfit / grossRevenue) * 100).toFixed(1),
+      percentage: grossRevenue > 0 ? ((netProfit / grossRevenue) * 100).toFixed(1) : '0.0',
     },
     {
       name: 'Power & Diesel',
-      value: dynamicOverheads.power,
+      value: dynamicOverheads.power || 0,
       color: '#F59E0B', // Amber
-      percentage: ((dynamicOverheads.power / grossRevenue) * 100).toFixed(1),
+      percentage: grossRevenue > 0 ? (((dynamicOverheads.power || 0) / grossRevenue) * 100).toFixed(1) : '0.0',
     },
     {
       name: 'Facility & Maintenance',
-      value: dynamicOverheads.maintenance,
+      value: dynamicOverheads.maintenance || 0,
       color: '#F43F5E', // Rose
-      percentage: ((dynamicOverheads.maintenance / grossRevenue) * 100).toFixed(1),
+      percentage: grossRevenue > 0 ? (((dynamicOverheads.maintenance || 0) / grossRevenue) * 100).toFixed(1) : '0.0',
     },
     {
       name: 'Cleaning & Security',
-      value: dynamicOverheads.cleaningSecurity,
+      value: dynamicOverheads.cleaningSecurity || 0,
       color: '#6366F1', // Indigo
-      percentage: ((dynamicOverheads.cleaningSecurity / grossRevenue) * 100).toFixed(1),
+      percentage: grossRevenue > 0 ? (((dynamicOverheads.cleaningSecurity || 0) / grossRevenue) * 100).toFixed(1) : '0.0',
     },
     {
       name: 'Internet & Tech',
-      value: dynamicOverheads.internet,
+      value: dynamicOverheads.internet || 0,
       color: '#06B6D4', // Cyan
-      percentage: ((dynamicOverheads.internet / grossRevenue) * 100).toFixed(1),
+      percentage: grossRevenue > 0 ? (((dynamicOverheads.internet || 0) / grossRevenue) * 100).toFixed(1) : '0.0',
     },
   ];
   if (additionalAdmin > 0) {
@@ -151,17 +194,17 @@ export default function ProfitLossCharts() {
       name: 'Administrative',
       value: additionalAdmin,
       color: '#8B5CF6', // Purple
-      percentage: ((additionalAdmin / grossRevenue) * 100).toFixed(1),
+      percentage: grossRevenue > 0 ? ((additionalAdmin / grossRevenue) * 100).toFixed(1) : '0.0',
     });
   }
 
   // Waterfall Chart Data 
   const waterfallData = [
     { step: 'Gross Rent Roll', amount: grossRevenue, fill: '#0B1D2E' }, // Brand Navy
-    { step: 'Power & Utility', amount: dynamicOverheads.power, fill: '#F43F5E' },
-    { step: 'Maintenance', amount: dynamicOverheads.maintenance, fill: '#F43F5E' },
-    { step: 'Cleaning/Security', amount: dynamicOverheads.cleaningSecurity, fill: '#F43F5E' },
-    { step: 'Net Cashflow', amount: netProfit, fill: '#12897F' }, // Brand Teal
+    { step: 'Power & Utility', amount: dynamicOverheads.power || 0, fill: '#F43F5E' },
+    { step: 'Maintenance', amount: dynamicOverheads.maintenance || 0, fill: '#F43F5E' },
+    { step: 'Cleaning/Security', amount: dynamicOverheads.cleaningSecurity || 0, fill: '#F43F5E' },
+    { step: 'Net Cashflow', amount: Math.max(0, netProfit), fill: '#12897F' }, // Brand Teal
   ];
 
   const CustomDonutTooltip = ({ active, payload }: any) => {

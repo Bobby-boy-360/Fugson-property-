@@ -1,5 +1,5 @@
 /**
- * Next.js Type Shims for PropertyPro Management Portal
+ * Next.js Type Shims for Fugson Property Management Portal
  * Allows Next.js App Router route protection middleware and page code
  * to typecheck seamlessly in this environment.
  */

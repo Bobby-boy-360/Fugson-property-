@@ -40,7 +40,7 @@ const NEXTJS_FILES = [
   {
     name: 'app/pay/[token]/page.tsx',
     path: 'app/pay/[token]/page.tsx',
-    description: 'Tenant Public Portal with WhatsApp token verification & payment controls',
+    description: 'Tenant Public Portal with Email token verification & payment controls',
   },
 ];
 
@@ -131,7 +131,7 @@ export default function CodeViewerModal({ isOpen, onClose }: CodeViewerModalProp
                 <li>Deploy alongside your Node.js + PostgreSQL backend on Railway.</li>
                 <li>Uses standard App Router conventions (<code className="bg-slate-200 px-1 rounded font-mono">layout.tsx</code>, <code className="bg-slate-200 px-1 rounded font-mono">page.tsx</code>, <code className="bg-slate-200 px-1 rounded font-mono">middleware.ts</code>).</li>
                 <li>Interactive client components marked with <code className="bg-slate-200 px-1 rounded font-mono">'use client'</code>.</li>
-                <li>Design system strictly adheres to PropertyPro's <code className="bg-slate-200 px-1 rounded font-mono">#0B1D2E</code> sidebar and <code className="bg-slate-200 px-1 rounded font-mono">#12897F</code> accent teal.</li>
+                <li>Design system strictly adheres to Fugson Property's <code className="bg-slate-200 px-1 rounded font-mono">#0B1D2E</code> sidebar and <code className="bg-slate-200 px-1 rounded font-mono">#12897F</code> accent teal.</li>
               </ul>
             </div>
           </div>

@@ -16,7 +16,7 @@ import {
   ArrowUpRight,
   TrendingUp,
   Phone,
-  MessageSquare,
+  Mail,
   Eye,
   Send,
   X,
@@ -81,7 +81,7 @@ export default function AgentDashboardPage({
   const totalCommissionsEarned = unremittedCommissions + remittedCommissions;
   const totalAssignedUnits = assignedProperties.reduce((sum, p) => sum + p.units, 0);
   const totalOccupiedUnits = assignedProperties.reduce((sum, p) => sum + p.occupiedUnits, 0);
-  const overallOccupancy = Math.round((totalOccupiedUnits / totalAssignedUnits) * 100);
+  const overallOccupancy = totalAssignedUnits > 0 ? Math.round((totalOccupiedUnits / totalAssignedUnits) * 100) : 0;
 
   const filteredCommissions = agentPayments.filter((p) => {
     if (commissionFilter === 'UNREMITTED') return !p.agentCommissionRemitted;
@@ -99,8 +99,9 @@ export default function AgentDashboardPage({
     );
   });
 
-  const handleSendWhatsAppReminder = (tenant: PaymentRecord) => {
-    showToast(`WhatsApp reminder with token link dispatched to ${tenant.tenantName} (${tenant.phone})`);
+  const handleSendEmailInvoice = (tenant: PaymentRecord) => {
+    const email = tenant.tenantEmail || `${tenant.tenantName.toLowerCase().replace(/\s+/g, '.')}@example.com`;
+    showToast(`Official email invoice with payment token dispatched to ${tenant.tenantName} (${email})`);
   };
 
   const handleRequestPayout = () => {
@@ -219,16 +220,25 @@ export default function AgentDashboardPage({
             <span className="text-xs text-slate-500">{assignedProperties.length} Estates Under Care</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {assignedProperties.map((property) => {
-              const occupancy = Math.round((property.occupiedUnits / property.units) * 100);
-              const isComingSoon = property.status === 'Coming Soon';
+          {assignedProperties.length === 0 ? (
+            <div className="bg-white rounded-xl border border-slate-200 p-10 text-center space-y-2">
+              <Building className="w-8 h-8 text-slate-300 mx-auto" />
+              <div className="font-bold text-slate-800 text-sm">No properties assigned to your agent profile yet</div>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Once the administrator allocates residential estates or commercial plazas to your account, your rent roll and occupancy will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {assignedProperties.map((property) => {
+                const occupancy = property.units > 0 ? Math.round((property.occupiedUnits / property.units) * 100) : 0;
+                const isComingSoon = property.status === 'Coming Soon';
 
-              return (
-                <div
-                  key={property.id}
-                  className="bg-white rounded-xl border border-slate-200 shadow-2xs p-5 flex flex-col justify-between space-y-4 hover:shadow-md transition"
-                >
+                return (
+                  <div
+                    key={property.id}
+                    className="bg-white rounded-xl border border-slate-200 shadow-2xs p-5 flex flex-col justify-between space-y-4 hover:shadow-md transition"
+                  >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-teal-50 text-[#12897F] border border-teal-200">
@@ -291,8 +301,9 @@ export default function AgentDashboardPage({
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+    )}
 
       {/* SECTION 2: MY TENANTS */}
       {activeSection === 'My Tenants' && (
@@ -300,7 +311,7 @@ export default function AgentDashboardPage({
           <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-bold text-slate-900">Directly Managed Tenants</h2>
-              <p className="text-xs text-slate-500">Contact tenants, dispatch WhatsApp links, or inspect their portal view.</p>
+              <p className="text-xs text-slate-500">Contact tenants, dispatch email invoices, or inspect their portal view.</p>
             </div>
 
             <div className="relative w-full sm:w-64">
@@ -325,12 +336,19 @@ export default function AgentDashboardPage({
                     <th className="py-3 px-4">Estate</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4">Owed / Paid</th>
-                    <th className="py-3 px-4">Phone / WhatsApp</th>
+                    <th className="py-3 px-4">Phone / Email</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {filteredTenants.map((tenant) => (
+                  {filteredTenants.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-400 text-xs">
+                        No tenants currently assigned to this agent portfolio.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredTenants.map((tenant) => (
                     <tr key={tenant.id} className="hover:bg-slate-50/70 transition">
                       <td className="py-3.5 px-4 font-bold text-slate-900">
                         {tenant.tenantName}
@@ -365,18 +383,19 @@ export default function AgentDashboardPage({
                       </td>
 
                       <td className="py-3.5 px-4 text-slate-600 font-mono text-[11px]">
-                        {tenant.phone}
+                        <div>{tenant.phone}</div>
+                        <div className="text-[10px] text-blue-600 font-sans font-semibold">[Email: Verified]</div>
                       </td>
 
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            onClick={() => handleSendWhatsAppReminder(tenant)}
-                            className="px-2.5 py-1.5 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                            onClick={() => handleSendEmailInvoice(tenant)}
+                            className="px-2.5 py-1.5 text-xs font-semibold bg-teal-50 hover:bg-teal-100 text-[#12897F] rounded-lg transition flex items-center gap-1 cursor-pointer border border-teal-100"
                           >
-                            <MessageSquare className="w-3.5 h-3.5" />
-                            <span>WhatsApp Link</span>
+                            <Mail className="w-3.5 h-3.5" />
+                            <span>Email Invoice</span>
                           </button>
 
                           <button
@@ -390,7 +409,7 @@ export default function AgentDashboardPage({
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  )))}
                 </tbody>
               </table>
             </div>
@@ -398,59 +417,65 @@ export default function AgentDashboardPage({
 
           {/* Mobile Card List (< 768px) */}
           <div className="md:hidden space-y-3">
-            {filteredTenants.map((tenant) => (
-              <div key={tenant.id} className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-2xs">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">{tenant.tenantName}</h3>
-                    <span className="text-xs text-slate-500">{tenant.unit} • {tenant.property}</span>
-                  </div>
-
-                  {tenant.status === 'Paid' ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      Paid
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                      Overdue
-                    </span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 p-2 bg-slate-50 rounded-lg text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total Lease</span>
-                    <span className="font-bold text-slate-900">{formatNaira(tenant.amount)}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Amount Owed</span>
-                    <span className={`font-bold ${tenant.amountOwed > 0 ? 'text-amber-600' : 'text-emerald-700'}`}>
-                      {formatNaira(tenant.amountOwed)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="pt-1 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleSendWhatsAppReminder(tenant)}
-                    className="flex-1 py-2 text-center text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg transition flex items-center justify-center gap-1"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>WhatsApp</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => onViewTenantPOV?.(tenant.id)}
-                    className="flex-1 py-2 text-center text-xs font-semibold bg-[#12897F] text-white rounded-lg transition flex items-center justify-center gap-1"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>Tenant POV</span>
-                  </button>
-                </div>
+            {filteredTenants.length === 0 ? (
+              <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-400 text-xs">
+                No tenants currently assigned to this agent portfolio.
               </div>
-            ))}
+            ) : (
+              filteredTenants.map((tenant) => (
+                <div key={tenant.id} className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-2xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900">{tenant.tenantName}</h3>
+                      <span className="text-xs text-slate-500">{tenant.unit} • {tenant.property}</span>
+                    </div>
+
+                    {tenant.status === 'Paid' ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        Paid
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                        Overdue
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 p-2 bg-slate-50 rounded-lg text-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total Lease</span>
+                      <span className="font-bold text-slate-900">{formatNaira(tenant.amount)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold block">Amount Owed</span>
+                      <span className={`font-bold ${tenant.amountOwed > 0 ? 'text-amber-600' : 'text-emerald-700'}`}>
+                        {formatNaira(tenant.amountOwed)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-1 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSendEmailInvoice(tenant)}
+                      className="flex-1 py-2 text-center text-xs font-semibold bg-teal-50 hover:bg-teal-100 text-[#12897F] rounded-lg transition flex items-center justify-center gap-1 border border-teal-100 cursor-pointer"
+                    >
+                      <Mail className="w-3.5 h-3.5" />
+                      <span>Email Invoice</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onViewTenantPOV?.(tenant.id)}
+                      className="flex-1 py-2 text-center text-xs font-semibold bg-[#12897F] text-white rounded-lg transition flex items-center justify-center gap-1"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Tenant POV</span>
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

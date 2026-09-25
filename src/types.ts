@@ -18,10 +18,29 @@ export interface AgentItem {
   specialty: string;
   assignedPropertiesCount: number;
   managedTenantsCount: number;
+  assignedPropertyIds?: string[];
+  assignedPropertyNames?: string[];
+  assignedTenantIds?: string[];
+  assignedTenantNames?: string[];
   totalLeaseVolume: number;
   unremittedCommission: number;
   remittedCommission: number;
   status: 'Active' | 'On Leave';
+}
+
+export interface TenantSignupPayload {
+  fullName: string;
+  email: string;
+  phone: string;
+  password: string;
+  property: string;
+  unit: string;
+  rentAmount: number;
+  leasePeriod?: string;
+  nextOfKinName?: string;
+  nextOfKinRelationship?: string;
+  nextOfKinPhone?: string;
+  emergencyContact?: string;
 }
 
 export interface ShortletItem {
@@ -53,10 +72,15 @@ export interface PaymentRecord {
   agentCommissionAmount?: number;
   agentCommissionRemitted?: boolean;
   multiYearEligible?: boolean;
+  autoEmailReceipt?: boolean;
   amountOwed: number;
   amountPaid: number;
   leasePeriod: string;
   phone: string;
+  nextOfKinName?: string;
+  nextOfKinRelationship?: string;
+  nextOfKinPhone?: string;
+  emergencyContact?: string;
   misconductStrikes: MisconductRecord[];
 }
 
@@ -103,7 +127,7 @@ export interface ShortletBooking {
   guestPhone?: string;
   source: 'AIRBNB' | 'DIRECT';
   airbnbReservationCode?: string;
-  syncMethod: 'Airbnb API v2' | 'iCal Sync' | 'Direct PropertyPro Pay';
+  syncMethod: 'Airbnb API v2' | 'iCal Sync' | 'Direct Fugson Property Pay';
   checkIn: string;
   checkOut: string;
   nights: number;

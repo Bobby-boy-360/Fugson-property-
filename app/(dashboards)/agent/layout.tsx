@@ -14,7 +14,7 @@ import {
   Shield,
   UserCheck,
 } from 'lucide-react';
-import { logout } from '@/src/utils/auth';
+import { logout, getCurrentUser } from '@/src/utils/auth';
 
 interface AgentLayoutProps {
   children: React.ReactNode;
@@ -31,6 +31,14 @@ export default function AgentLayout({
 }: AgentLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeNav, setActiveNav] = useState(activeSection);
+  const currentUser = typeof window !== 'undefined' ? getCurrentUser() : null;
+  const agentDisplayName = currentUser?.name || 'Field Agent';
+  const agentInitials = agentDisplayName
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'FA';
 
   React.useEffect(() => {
     if (activeSection) {
@@ -71,7 +79,7 @@ export default function AgentLayout({
             <Building2 className="w-4 h-4" />
           </div>
           <div>
-            <span className="font-bold text-sm text-white">PropertyPro</span>
+            <span className="font-bold text-sm text-white">Fugson Property</span>
             <span className="text-[10px] text-teal-300 block leading-tight">Agent Field Portal</span>
           </div>
         </div>
@@ -97,7 +105,7 @@ export default function AgentLayout({
               <Building2 className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="font-bold text-base text-white tracking-tight leading-tight">PropertyPro</h1>
+              <h1 className="font-bold text-base text-white tracking-tight leading-tight">Fugson Property</h1>
               <p className="text-[11px] text-teal-400 font-medium tracking-wide uppercase">Agent Workspace</p>
             </div>
           </div>
@@ -115,11 +123,11 @@ export default function AgentLayout({
         <div className="px-6 py-4">
           <div className="bg-[#142A42] border border-slate-700/60 rounded-lg p-3 flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-teal-500/20 text-teal-300 flex items-center justify-center font-bold text-xs">
-              EN
+              {agentInitials}
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-semibold text-white truncate">Emeka Nwosu</div>
-              <div className="text-[11px] text-teal-300 truncate">Licensed Senior Agent</div>
+              <div className="text-xs font-semibold text-white truncate">{agentDisplayName}</div>
+              <div className="text-[11px] text-teal-300 truncate">Licensed Field Agent</div>
             </div>
           </div>
         </div>
@@ -207,11 +215,11 @@ export default function AgentLayout({
 
             <div className="flex items-center gap-3 pl-3 border-l border-slate-200">
               <div className="text-right hidden sm:block">
-                <div className="text-sm font-bold text-slate-800 leading-tight">Emeka Nwosu</div>
-                <div className="text-[11px] text-slate-500">Agent ID: AGT-01</div>
+                <div className="text-sm font-bold text-slate-800 leading-tight">{agentDisplayName}</div>
+                <div className="text-[11px] text-slate-500">Agent Field Portal</div>
               </div>
               <div className="w-9 h-9 rounded-full bg-[#0B1D2E] text-teal-400 flex items-center justify-center font-bold text-sm shadow-xs border border-slate-700">
-                EN
+                {agentInitials}
               </div>
             </div>
           </div>

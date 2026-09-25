@@ -22,6 +22,8 @@ import {
   Check,
   Eye,
   SlidersHorizontal,
+  Mail,
+  Trash2,
 } from 'lucide-react';
 import { PaymentRecord, MisconductRecord } from '@/src/types';
 import { tenantService } from '@/src/services/tenantService';
@@ -122,6 +124,62 @@ export default function AdminDashboardPage({
     );
   };
 
+  // Drawer Action: Toggle Auto-Email Receipt Preference
+  const handleToggleAutoEmailReceipt = (tenantId: string) => {
+    setPayments((prev) =>
+      prev.map((item) => {
+        if (item.id === tenantId) {
+          const nextVal = !item.autoEmailReceipt;
+          showToast(
+            nextVal
+              ? `Auto-Email Receipt on Payment enabled for ${item.tenantName}.`
+              : `Auto-Email Receipt on Payment disabled for ${item.tenantName}.`
+          );
+          const updated = { ...item, autoEmailReceipt: nextVal };
+          tenantService.updateTenant(tenantId, { autoEmailReceipt: nextVal });
+          if (selectedTenant?.id === tenantId) setSelectedTenant(updated);
+          return updated;
+        }
+        return item;
+      })
+    );
+  };
+
+  // Drawer Action: Update Payment Status to Paid or Overdue
+  const handleUpdatePaymentStatus = (tenantId: string, newStatus: 'Paid' | 'Overdue') => {
+    setPayments((prev) =>
+      prev.map((item) => {
+        if (item.id === tenantId) {
+          const isPaid = newStatus === 'Paid';
+          const receiptNo = item.receiptNumber && !item.receiptNumber.includes('PENDING')
+            ? item.receiptNumber
+            : `REC-FUG-${Date.now().toString().slice(-6)}`;
+          const updated: PaymentRecord = {
+            ...item,
+            status: newStatus,
+            amountPaid: isPaid ? (item.amountPaid > 0 ? item.amountPaid : item.amount) : 0,
+            amountOwed: isPaid ? 0 : item.amount,
+            receiptNumber: receiptNo,
+          };
+          tenantService.updateTenant(tenantId, updated);
+          if (selectedTenant?.id === tenantId) setSelectedTenant(updated);
+
+          if (isPaid) {
+            if (updated.autoEmailReceipt) {
+              showToast(`[Email Sent] Official receipt #${receiptNo} automatically emailed to ${updated.tenantEmail || updated.tenantName}!`);
+            } else {
+              showToast(`Payment status updated to Paid for ${item.tenantName}.`);
+            }
+          } else {
+            showToast(`Payment status reverted to Overdue for ${item.tenantName}.`);
+          }
+          return updated;
+        }
+        return item;
+      })
+    );
+  };
+
   // Drawer Action: Log Misconduct Record
   const handleLogMisconduct = (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,6 +244,23 @@ export default function AdminDashboardPage({
     }
   };
 
+  const handleDeleteTenant = async (tenantId: string) => {
+    const target = payments.find((p) => p.id === tenantId);
+    const name = target ? target.tenantName : 'Tenant';
+    await tenantService.deleteTenant(tenantId);
+    setPayments((prev) => prev.filter((p) => p.id !== tenantId));
+    if (selectedTenant?.id === tenantId) {
+      setSelectedTenant(null);
+    }
+    showToast(`Tenant "${name}" deleted from directory.`);
+  };
+
+  const handleAddTenant = async (newTenant: PaymentRecord) => {
+    await tenantService.addTenant(newTenant);
+    setPayments((prev) => [newTenant, ...prev]);
+    showToast(`Tenant "${newTenant.tenantName}" registered successfully.`);
+  };
+
   return (
     <div className="relative space-y-6">
       {/* Toast Alert */}
@@ -211,6 +286,8 @@ export default function AdminDashboardPage({
           tenants={payments}
           onSelectTenant={(tenant) => setSelectedTenant(tenant)}
           onViewTenantPOV={handleViewPOV}
+          onDeleteTenant={handleDeleteTenant}
+          onAddTenant={handleAddTenant}
           filterProperty={tenantFilterProperty}
           onClearPropertyFilter={() => setTenantFilterProperty(undefined)}
         />
@@ -255,7 +332,7 @@ export default function AdminDashboardPage({
                 className="text-xs px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold rounded-lg shadow-2xs transition shrink-0 cursor-pointer flex items-center gap-1.5"
               >
                 <Users className="w-3.5 h-3.5 text-blue-600" />
-                <span>Tenants (7)</span>
+                <span>Tenants ({payments.length})</span>
               </button>
 
               <button
@@ -273,7 +350,7 @@ export default function AdminDashboardPage({
                 className="text-xs px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold rounded-lg shadow-2xs transition shrink-0 cursor-pointer flex items-center gap-1.5"
               >
                 <UserCheck className="w-3.5 h-3.5 text-amber-600" />
-                <span>Agents (3)</span>
+                <span>Agents</span>
               </button>
 
               <button
@@ -425,88 +502,121 @@ export default function AdminDashboardPage({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {filteredDashboardPayments.map((record) => (
-                    <tr
-                      key={record.id}
-                      onClick={() => setSelectedTenant(record)}
-                      className={`hover:bg-slate-50/80 transition cursor-pointer ${
-                        selectedTenant?.id === record.id ? 'bg-teal-50/40' : ''
-                      }`}
-                    >
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900">{record.tenantName}</div>
-                        <div className="text-[11px] text-slate-500">
-                          {record.unit} • {record.property}
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        {record.status === 'Paid' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <CheckCircle2 className="w-3 h-3" />
-                            Paid
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                            <Clock className="w-3 h-3" />
-                            Overdue
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900">{formatNaira(record.amount)}</div>
-                        <div className="text-[10px] text-slate-500">
-                          {record.status === 'Paid' ? 'Paid in Full' : `₦${record.amountOwed.toLocaleString()} Due`}
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-4 font-medium text-slate-600">{record.date}</td>
-
-                      <td className="py-3.5 px-4">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {record.multiYearEligible && (
-                            <span className="text-[10px] font-bold bg-teal-50 text-[#12897F] px-2 py-0.5 rounded border border-teal-200">
-                              Multi-Year Enabled
-                            </span>
-                          )}
-                          {record.misconductStrikes.length > 0 && (
-                            <span className="text-[10px] font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded border border-rose-200">
-                              {record.misconductStrikes.length} Strike
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedTenant(record)}
-                            className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
-                          >
-                            Details
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleViewPOV(record.id)}
-                            className="px-2.5 py-1.5 text-xs font-semibold text-[#12897F] bg-teal-50 hover:bg-teal-100 rounded-lg transition flex items-center gap-1"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>Tenant POV</span>
-                          </button>
-                        </div>
+                  {filteredDashboardPayments.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-slate-400 text-xs">
+                        <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                        <span className="font-semibold text-slate-600 block mb-1">No lease or payment records found</span>
+                        <span>Onboard tenants via the Tenants directory or adjust your search and filters.</span>
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredDashboardPayments.map((record) => (
+                      <tr
+                        key={record.id}
+                        onClick={() => setSelectedTenant(record)}
+                        className={`hover:bg-slate-50/80 transition cursor-pointer ${
+                          selectedTenant?.id === record.id ? 'bg-teal-50/40' : ''
+                        }`}
+                      >
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-slate-900">{record.tenantName}</div>
+                          <div className="text-[11px] text-slate-500">
+                            {record.unit} • {record.property}
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          {record.status === 'Paid' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3" />
+                              Paid
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                              <Clock className="w-3 h-3" />
+                              Overdue
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-slate-900">{formatNaira(record.amount)}</div>
+                          <div className="text-[10px] text-slate-500">
+                            {record.status === 'Paid' ? 'Paid in Full' : `₦${record.amountOwed.toLocaleString()} Due`}
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 font-medium text-slate-600">{record.date}</td>
+
+                        <td className="py-3.5 px-4">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
+                              [Email: Verified]
+                            </span>
+                            {record.multiYearEligible && (
+                              <span className="text-[10px] font-bold bg-teal-50 text-[#12897F] px-2 py-0.5 rounded border border-teal-200">
+                                Multi-Year Enabled
+                              </span>
+                            )}
+                            {record.misconductStrikes.length > 0 && (
+                              <span className="text-[10px] font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded border border-rose-200">
+                                {record.misconductStrikes.length} Strike
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedTenant(record)}
+                              className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+                            >
+                              Details
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleViewPOV(record.id)}
+                              className="px-2.5 py-1.5 text-xs font-semibold text-[#12897F] bg-teal-50 hover:bg-teal-100 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Tenant POV</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`Are you sure you want to delete ${record.tenantName}?`)) {
+                                  handleDeleteTenant(record.id);
+                                }
+                              }}
+                              title={`Delete ${record.tenantName}`}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
 
             {/* Mobile Card-Based Responsive View (< 768px) */}
             <div className="md:hidden divide-y divide-slate-100 p-3 space-y-3">
-              {filteredDashboardPayments.map((record) => (
+              {filteredDashboardPayments.length === 0 ? (
+                <div className="py-10 text-center text-slate-400 text-xs space-y-2">
+                  <Users className="w-8 h-8 text-slate-300 mx-auto" />
+                  <span className="font-semibold text-slate-600 block">No lease records found</span>
+                  <p className="text-slate-400 text-[11px]">Onboard tenants via the Tenants directory.</p>
+                </div>
+              ) : (
+                filteredDashboardPayments.map((record) => (
                 <div
                   key={record.id}
                   onClick={() => setSelectedTenant(record)}
@@ -522,17 +632,32 @@ export default function AdminDashboardPage({
                       </div>
                     </div>
 
-                    {record.status === 'Paid' ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
-                        <CheckCircle2 className="w-3 h-3" />
-                        Paid
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
-                        <Clock className="w-3 h-3" />
-                        Overdue
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {record.status === 'Paid' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Paid
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                          <Clock className="w-3 h-3" />
+                          Overdue
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`Are you sure you want to delete ${record.tenantName}?`)) {
+                            handleDeleteTenant(record.id);
+                          }
+                        }}
+                        className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
@@ -545,6 +670,23 @@ export default function AdminDashboardPage({
                       <span className="text-slate-400 text-[10px] uppercase block">Lease Date</span>
                       <span className="font-medium text-slate-600">{record.date}</span>
                     </div>
+                  </div>
+
+                  {/* Badges */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
+                      [Email: Verified]
+                    </span>
+                    {record.multiYearEligible && (
+                      <span className="text-[10px] font-bold bg-teal-50 text-[#12897F] px-2 py-0.5 rounded border border-teal-200">
+                        Multi-Year Enabled
+                      </span>
+                    )}
+                    {record.misconductStrikes.length > 0 && (
+                      <span className="text-[10px] font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded border border-rose-200">
+                        {record.misconductStrikes.length} Strike
+                      </span>
+                    )}
                   </div>
 
                   {/* Actions */}
@@ -567,7 +709,7 @@ export default function AdminDashboardPage({
                     </button>
                   </div>
                 </div>
-              ))}
+              )))}
             </div>
           </div>
         </div>
@@ -633,6 +775,26 @@ export default function AdminDashboardPage({
                     <span>Lease Period:</span>
                     <span className="font-semibold text-slate-800">{selectedTenant.leasePeriod}</span>
                   </div>
+
+                  {selectedTenant.status !== 'Paid' ? (
+                    <button
+                      type="button"
+                      onClick={() => handleUpdatePaymentStatus(selectedTenant.id, 'Paid')}
+                      className="w-full mt-2 py-2 px-3 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Mark Payment as Paid (Clear Arrears)</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleUpdatePaymentStatus(selectedTenant.id, 'Overdue')}
+                      className="w-full mt-2 py-1.5 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium text-[11px] flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Clock className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Revert Status to Overdue (Reset Arrears)</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Direct "View Tenant POV" Button */}
@@ -644,6 +806,74 @@ export default function AdminDashboardPage({
                   <Eye className="w-4 h-4" />
                   <span>Inspect Tenant POV for {selectedTenant.tenantName} →</span>
                 </button>
+
+                {/* Email Invoicing & Statements Section */}
+                <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-teal-50 text-[#12897F] flex items-center justify-center">
+                        <Mail className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-900">
+                          Email Invoicing & Statements
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Automated electronic billing & receipts
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200 shrink-0">
+                      [Email: Verified]
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-50 rounded-lg text-[11px] text-slate-600 flex items-center justify-between">
+                    <span className="text-slate-500">Tenant Email:</span>
+                    <span className="font-semibold text-slate-800 font-mono">
+                      {selectedTenant.tenantEmail || `${selectedTenant.tenantName.toLowerCase().replace(/\s+/g, '.')}@example.com`}
+                    </span>
+                  </div>
+
+                  {/* Auto-Email Receipt on Payment Toggle */}
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-slate-900 block text-xs">
+                        Auto-Email Receipt on Payment
+                      </span>
+                      <span className="text-[11px] text-slate-500 block">
+                        Dispatches PDF receipt to tenant once status becomes Paid.
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAutoEmailReceipt(selectedTenant.id)}
+                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        selectedTenant.autoEmailReceipt ? 'bg-[#12897F]' : 'bg-slate-200'
+                      }`}
+                      aria-label="Toggle Auto-Email Receipt on Payment"
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          selectedTenant.autoEmailReceipt ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const email = selectedTenant.tenantEmail || `${selectedTenant.tenantName.toLowerCase().replace(/\s+/g, '.')}@example.com`;
+                      showToast(`Official invoice & statement emailed to ${selectedTenant.tenantName} (${email})`);
+                    }}
+                    className="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-lg font-semibold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+                  >
+                    <Mail className="w-3.5 h-3.5 text-[#12897F]" />
+                    <span>Email Invoice to Tenant</span>
+                  </button>
+                </div>
 
                 {/* 2. Multi-Year Advance Payment Toggle */}
                 <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2">
@@ -798,11 +1028,24 @@ export default function AdminDashboardPage({
               </div>
 
               {/* Drawer Footer */}
-              <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`Are you sure you want to delete ${selectedTenant.tenantName}?`)) {
+                      handleDeleteTenant(selectedTenant.id);
+                    }
+                  }}
+                  className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold rounded-lg text-xs flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Tenant</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setSelectedTenant(null)}
-                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold rounded-lg text-xs"
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold rounded-lg text-xs cursor-pointer"
                 >
                   Close Drawer
                 </button>

@@ -25,10 +25,12 @@ import {
   AlertOctagon,
   Check,
   BadgeAlert,
+  Mail,
 } from 'lucide-react';
 import { formatNaira, getCurrentUser, logout } from '@/src/utils/auth';
 import { HOUSE_RULES, INITIAL_TENANT_PAYMENTS } from '@/src/data/mockData';
 import { PaymentRecord } from '@/src/types';
+import { tenantService } from '@/src/services/tenantService';
 
 interface TenantPortalProps {
   params?: { token?: string };
@@ -36,12 +38,28 @@ interface TenantPortalProps {
 }
 
 export default function TenantPublicPortal({ params, onNavigate }: TenantPortalProps) {
-  // Determine initial tenant based on current user or default to Alabi Adebayo
+  // Determine initial tenant based on current user
   const currentUser = typeof window !== 'undefined' ? getCurrentUser() : null;
-  const initialTenantId = currentUser?.tenantId || 'pay-001';
+  const initialTenantId = currentUser?.tenantId || '';
 
   const [selectedTenantId, setSelectedTenantId] = useState<string>(initialTenantId);
-  const [tenants, setTenants] = useState<PaymentRecord[]>(INITIAL_TENANT_PAYMENTS);
+  const [tenants, setTenants] = useState<PaymentRecord[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const fetchTenants = async () => {
+      setIsLoading(true);
+      const data = await tenantService.getTenants();
+      setTenants(data);
+      if (data.length > 0) {
+        if (!selectedTenantId || !data.some((t) => t.id === selectedTenantId)) {
+          setSelectedTenantId(data[0].id);
+        }
+      }
+      setIsLoading(false);
+    };
+    fetchTenants();
+  }, []);
 
   // Active tenant record
   const currentTenant = tenants.find((t) => t.id === selectedTenantId) || tenants[0];
@@ -55,7 +73,7 @@ export default function TenantPublicPortal({ params, onNavigate }: TenantPortalP
 
   // Payment form state inside modal
   const [paymentMethod, setPaymentMethod] = useState<'CARD' | 'TRANSFER'>('CARD');
-  const [paymentAmount, setPaymentAmount] = useState<number>(currentTenant.amountOwed || 1200000);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [leaseYears, setLeaseYears] = useState<number>(1);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
@@ -67,12 +85,14 @@ export default function TenantPublicPortal({ params, onNavigate }: TenantPortalP
 
   // Sync payment amount when selected tenant changes
   useEffect(() => {
-    if (currentTenant.amountOwed > 0) {
-      setPaymentAmount(currentTenant.amountOwed);
-    } else {
-      setPaymentAmount(currentTenant.amount);
+    if (currentTenant) {
+      if (currentTenant.amountOwed > 0) {
+        setPaymentAmount(currentTenant.amountOwed);
+      } else {
+        setPaymentAmount(currentTenant.amount);
+      }
     }
-  }, [selectedTenantId, currentTenant.amountOwed, currentTenant.amount]);
+  }, [selectedTenantId, currentTenant?.amountOwed, currentTenant?.amount]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -107,16 +127,23 @@ export default function TenantPublicPortal({ params, onNavigate }: TenantPortalP
 
       // Update tenant state to Paid
       const newPaidAmount = currentTenant.amountPaid + paymentAmount;
+      const receiptNo = `REC-FUG-${Date.now().toString().slice(-6)}`;
       const updatedTenant: PaymentRecord = {
         ...currentTenant,
         amountOwed: 0,
         amountPaid: newPaidAmount,
         status: 'Paid',
-        receiptNumber: `REC-FUG-${Date.now().toString().slice(-6)}`,
+        receiptNumber: receiptNo,
       };
 
       setTenants((prev) => prev.map((t) => (t.id === currentTenant.id ? updatedTenant : t)));
-      showToast(`Payment of ${formatNaira(paymentAmount)} confirmed! Receipt generated.`);
+      tenantService.updateTenant(currentTenant.id, updatedTenant);
+
+      if (currentTenant.autoEmailReceipt) {
+        showToast(`Payment confirmed! [Email Sent] Official receipt #${receiptNo} automatically emailed to ${currentTenant.tenantEmail || 'your email'}.`);
+      } else {
+        showToast(`Payment of ${formatNaira(paymentAmount)} confirmed! Receipt generated.`);
+      }
     }, 900);
   };
 
@@ -128,6 +155,38 @@ export default function TenantPublicPortal({ params, onNavigate }: TenantPortalP
       window.location.href = '/login';
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#F4F5F7] flex items-center justify-center text-slate-500 text-xs">
+        Loading Tenant Portal...
+      </div>
+    );
+  }
+
+  if (!currentTenant) {
+    return (
+      <div className="min-h-screen bg-[#F4F5F7] flex flex-col items-center justify-center px-4 font-sans text-center">
+        <div className="max-w-md bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-teal-50 text-[#12897F] flex items-center justify-center mx-auto">
+            <Building2 className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-bold text-slate-900">No Tenant Invoices Available</h2>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            There are currently no active tenant records registered in Fugson Property. Please sign in as an Administrator to onboard tenants and issue verified rent tokens.
+          </p>
+          <div className="pt-2 flex justify-center gap-2">
+            <button
+              onClick={() => onNavigate ? onNavigate('/login') : (typeof window !== 'undefined' ? window.location.href = '/login' : null)}
+              className="px-4 py-2 bg-[#12897F] text-white text-xs font-semibold rounded-xl hover:bg-[#0f766e] transition cursor-pointer"
+            >
+              Go to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F4F5F7] text-slate-800 flex flex-col justify-start items-center px-4 py-6 sm:py-10 font-sans">
@@ -161,46 +220,25 @@ export default function TenantPublicPortal({ params, onNavigate }: TenantPortalP
 
           {/* Quick Persona Switcher Buttons */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-            <button
-              onClick={() => handleSwitchTenant('pay-001')}
-              title="Switch to Alabi Adebayo (Paid in full)"
-              className={`text-[10px] px-2 py-1 rounded-md font-semibold transition shrink-0 ${
-                selectedTenantId === 'pay-001'
-                  ? 'bg-[#12897F] text-white'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-              }`}
-            >
-              Alabi (Paid)
-            </button>
-
-            <button
-              onClick={() => handleSwitchTenant('pay-002')}
-              title="Switch to Folake Adeleke (Overdue ₦1.2M)"
-              className={`text-[10px] px-2 py-1 rounded-md font-semibold transition shrink-0 ${
-                selectedTenantId === 'pay-002'
-                  ? 'bg-amber-600 text-white'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-              }`}
-            >
-              Folake (Due)
-            </button>
-
-            <button
-              onClick={() => handleSwitchTenant('pay-003')}
-              title="Switch to Damilola Ojo (Multi-Year Enabled)"
-              className={`text-[10px] px-2 py-1 rounded-md font-semibold transition shrink-0 ${
-                selectedTenantId === 'pay-003'
-                  ? 'bg-[#0B1D2E] text-white'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-              }`}
-            >
-              Damilola
-            </button>
+            {tenants.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => handleSwitchTenant(t.id)}
+                title={`Switch to ${t.tenantName}`}
+                className={`text-[10px] px-2 py-1 rounded-md font-semibold transition shrink-0 cursor-pointer ${
+                  selectedTenantId === t.id
+                    ? 'bg-[#12897F] text-white'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                {t.tenantName.split(' ')[0]} ({t.status})
+              </button>
+            ))}
 
             <button
               onClick={handleExitPortal}
               title="Log out and return to Login"
-              className="text-[10px] px-2 py-1 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-md font-medium transition shrink-0 flex items-center gap-1"
+              className="text-[10px] px-2 py-1 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-md font-medium transition shrink-0 flex items-center gap-1 cursor-pointer"
             >
               <LogOut className="w-3 h-3" />
               <span>Exit</span>
@@ -217,12 +255,15 @@ export default function TenantPublicPortal({ params, onNavigate }: TenantPortalP
             <div className="w-12 h-12 rounded-2xl bg-[#12897F] flex items-center justify-center mx-auto mb-3 shadow-md">
               <Building2 className="w-6 h-6 text-white" />
             </div>
-            <h1 className="font-bold text-xl tracking-tight">PropertyPro</h1>
+            <h1 className="font-bold text-xl tracking-tight">Fugson Property</h1>
             <p className="text-xs text-teal-300 font-medium">Tenant Verified Payment Portal</p>
 
             <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-[11px] text-teal-300">
-              <ShieldCheck className="w-3.5 h-3.5 text-[#12897F]" />
-              <span>Verified WhatsApp Magic Link</span>
+              <Mail className="w-3.5 h-3.5 text-[#12897F]" />
+              <span>Verified Email Invoicing Link</span>
+              <span className="text-[10px] font-bold bg-teal-500/20 text-teal-300 px-1.5 py-0.5 rounded border border-teal-400/30">
+                [Email: Verified]
+              </span>
             </div>
           </div>
 
@@ -356,7 +397,7 @@ export default function TenantPublicPortal({ params, onNavigate }: TenantPortalP
 
           <div className="divide-y divide-slate-100">
             {currentTenant.status === 'Paid' && (
-              <div className="py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
+              <div className="py-3.5 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="text-xs font-bold text-slate-900">
                     Annual Lease Payment ({currentTenant.leasePeriod})
@@ -366,18 +407,32 @@ export default function TenantPublicPortal({ params, onNavigate }: TenantPortalP
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setShowReceiptModal(currentTenant.receiptNumber || 'REC-FUG-2025-084')}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#12897F] hover:text-[#0f766e] bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg transition shrink-0 cursor-pointer border border-teal-100"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download Receipt</span>
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const email = currentTenant.tenantEmail || `${currentTenant.tenantName.toLowerCase().replace(/\s+/g, '.')}@example.com`;
+                      showToast(`Statement & invoice sent to ${email}`);
+                    }}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg transition cursor-pointer border border-slate-200"
+                  >
+                    <Mail className="w-3.5 h-3.5 text-[#12897F]" />
+                    <span>Send Statement to my Email</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowReceiptModal(currentTenant.receiptNumber || 'REC-FUG-2025-084')}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#12897F] hover:text-[#0f766e] bg-teal-50 hover:bg-teal-100 px-2.5 py-1.5 rounded-lg transition cursor-pointer border border-teal-100"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download PDF</span>
+                  </button>
+                </div>
               </div>
             )}
 
-            <div className="py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
+            <div className="py-3.5 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-bold text-slate-900">
                   Prior Term Agricultural Tenancy (2024)
@@ -387,14 +442,28 @@ export default function TenantPublicPortal({ params, onNavigate }: TenantPortalP
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setShowReceiptModal('REC-FUG-2024-032')}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-[#12897F] hover:text-[#0f766e] bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg transition shrink-0 cursor-pointer border border-teal-100"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Download Receipt</span>
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const email = currentTenant.tenantEmail || `${currentTenant.tenantName.toLowerCase().replace(/\s+/g, '.')}@example.com`;
+                    showToast(`Statement & invoice sent to ${email}`);
+                  }}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg transition cursor-pointer border border-slate-200"
+                >
+                  <Mail className="w-3.5 h-3.5 text-[#12897F]" />
+                  <span>Send Statement to my Email</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowReceiptModal('REC-FUG-2024-032')}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#12897F] hover:text-[#0f766e] bg-teal-50 hover:bg-teal-100 px-2.5 py-1.5 rounded-lg transition cursor-pointer border border-teal-100"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download PDF</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -437,7 +506,7 @@ export default function TenantPublicPortal({ params, onNavigate }: TenantPortalP
             <div className="bg-[#0B1D2E] p-5 text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-teal-400" />
-                <h3 className="font-bold text-sm">PropertyPro House Rules</h3>
+                <h3 className="font-bold text-sm">Fugson Property House Rules</h3>
               </div>
               <button onClick={() => setShowHouseRules(false)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
@@ -447,8 +516,8 @@ export default function TenantPublicPortal({ params, onNavigate }: TenantPortalP
             <div className="p-5 space-y-3.5 text-xs text-slate-600 max-h-[60vh] overflow-y-auto">
               {HOUSE_RULES.map((rule, idx) => (
                 <div key={idx} className="border-b border-slate-100 pb-3 last:border-none last:pb-0">
-                  <h4 className="font-bold text-slate-900 mb-1">{idx + 1}. {rule.title}</h4>
-                  <p className="leading-relaxed">{rule.text}</p>
+                  <h4 className="font-bold text-slate-900 mb-1">{rule.title}</h4>
+                  <p className="leading-relaxed">{rule.rule}</p>
                 </div>
               ))}
             </div>
@@ -646,7 +715,7 @@ export default function TenantPublicPortal({ params, onNavigate }: TenantPortalP
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-slate-600">
                   <div className="font-bold text-slate-800">Providus Bank (Dedicated Virtual Swale Account)</div>
                   <div className="font-mono text-sm font-extrabold text-[#12897F]">9920194812</div>
-                  <div className="text-[11px] text-slate-500">Account Name: PropertyPro - {currentTenant.tenantName}</div>
+                  <div className="text-[11px] text-slate-500">Account Name: Fugson Property - {currentTenant.tenantName}</div>
                 </div>
               )}
 
@@ -717,13 +786,24 @@ export default function TenantPublicPortal({ params, onNavigate }: TenantPortalP
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowReceiptModal(null)}
-                  className="px-4 py-2 text-slate-600 bg-slate-100 rounded-lg font-medium"
+                  className="px-3.5 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium text-xs cursor-pointer"
                 >
                   Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const email = currentTenant.tenantEmail || `${currentTenant.tenantName.toLowerCase().replace(/\s+/g, '.')}@example.com`;
+                    showToast(`Official statement & receipt ${showReceiptModal} sent to ${email}`);
+                  }}
+                  className="px-3.5 py-2 text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Mail className="w-3.5 h-3.5 text-[#12897F]" />
+                  <span>Send Statement to my Email</span>
                 </button>
                 <button
                   type="button"
@@ -731,7 +811,7 @@ export default function TenantPublicPortal({ params, onNavigate }: TenantPortalP
                     showToast(`Receipt ${showReceiptModal}.pdf downloaded to device.`);
                     setShowReceiptModal(null);
                   }}
-                  className="px-4 py-2 bg-[#12897F] text-white rounded-lg font-semibold flex items-center gap-1.5"
+                  className="px-4 py-2 bg-[#12897F] hover:bg-[#0f766e] text-white rounded-lg font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download PDF</span>

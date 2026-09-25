@@ -76,7 +76,7 @@ export default function AdminLayout({
             <Building2 className="w-4 h-4" />
           </div>
           <div>
-            <span className="font-bold text-sm text-white">PropertyPro</span>
+            <span className="font-bold text-sm text-white">Fugson Property</span>
             <span className="text-[10px] text-teal-300 block leading-tight">Admin Console</span>
           </div>
         </div>
@@ -102,7 +102,7 @@ export default function AdminLayout({
               <Building2 className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="font-bold text-base text-white tracking-tight leading-tight">PropertyPro</h1>
+              <h1 className="font-bold text-base text-white tracking-tight leading-tight">Fugson Property</h1>
               <p className="text-[11px] text-teal-400 font-medium tracking-wide uppercase">Real Estate Management</p>
             </div>
           </div>
@@ -157,10 +157,6 @@ export default function AdminLayout({
                 ) : item.label === 'Shortlet' ? (
                   <span className="text-[9px] bg-rose-900/60 text-rose-300 border border-rose-500/30 px-1.5 py-0.5 rounded font-mono font-bold uppercase tracking-wider">
                     Airbnb Sync
-                  </span>
-                ) : item.label === 'Tenants' ? (
-                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono font-bold">
-                    4 Due
                   </span>
                 ) : null}
               </button>

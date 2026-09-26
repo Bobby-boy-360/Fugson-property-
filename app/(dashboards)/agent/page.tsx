@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { propertyService } from '@/src/services/propertyService';
 import { tenantService } from '@/src/services/tenantService';
-import { formatNaira } from '@/src/utils/auth';
+import { formatNaira } from '@/src/auth';
 import { PaymentRecord, PropertyItem } from '@/src/types';
 
 interface AgentDashboardPageProps {

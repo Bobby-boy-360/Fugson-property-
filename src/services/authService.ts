@@ -1,38 +1,42 @@
-import { AuthUser, UserRole } from '../types';
-import { getCurrentUser, loginAs, logout } from '../utils/auth';
+import { AuthUser } from '../types';
+import { getCurrentUser, setCookie, logout } from '../auth';
 
-// Simulated network delay
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const API_URL = 'https://propertypro-backend-production-ba1d.up.railway.app/api';
+const AUTH_COOKIE_NAME = 'auth_token';
 
 export const authService = {
-  async login(email: string, password: string):Promise<AuthUser> {
-    await delay(200); // simulate network latency
-    // Extremely simplified mock login logic based on email
-    let role: UserRole = 'TENANT';
-    let name = 'Alabi Adebayo';
-    let tenantId = 'pay-001';
+  async login(email: string, password: string): Promise<AuthUser> {
+    const res = await fetch(`${API_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
 
-    if (email.includes('admin')) {
-      role = 'ADMIN';
-      name = 'Chief Property Admin';
-    } else if (email.includes('agent') || email.includes('briggs')) {
-      role = 'AGENT';
-      name = 'Emeka Nwosu (Agent)';
-    } else {
-      role = 'TENANT';
-      name = 'Michael (Tenant)';
+    if (!res.ok) {
+      throw new Error('Invalid credentials.');
     }
 
-    return loginAs(role, email, tenantId, name);
+    const data = await res.json();
+
+    const user: AuthUser = {
+      id: data.id,
+      name: data.name,
+      email: data.email,
+      role: data.role.toUpperCase() as AuthUser['role'],
+      avatarUrl: data.avatarUrl,
+      tenantId: data.tenantId,
+    };
+
+    // Store the real, backend-verified session
+    setCookie(AUTH_COOKIE_NAME, JSON.stringify(user));
+    return user;
   },
 
   async logout(): Promise<void> {
-    await delay(200);
     logout();
   },
 
   async getSession(): Promise<AuthUser | null> {
-    await delay(200);
     return getCurrentUser();
   },
 };

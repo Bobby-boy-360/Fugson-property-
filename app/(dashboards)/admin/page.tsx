@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { PaymentRecord, MisconductRecord } from '@/src/types';
 import { tenantService } from '@/src/services/tenantService';
-import { formatNaira } from '@/src/utils/auth';
+import { formatNaira } from '@/src/auth';
 
 // Subcomponents
 import AdminPropertiesView from '@/src/components/admin/AdminPropertiesView';

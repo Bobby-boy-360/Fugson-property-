@@ -1,11 +1,27 @@
 import { AgentItem } from '../types';
-import { MOCK_AGENTS } from '../data/mockData';
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const API_URL = 'https://propertypro-backend-production-ba1d.up.railway.app/api';
 
 export const agentService = {
   async getAgents(): Promise<AgentItem[]> {
-    await delay(200);
-    return MOCK_AGENTS;
-  }
+    const res = await fetch(`${API_URL}/agents`);
+    if (!res.ok) throw new Error('Failed to fetch agents');
+    return res.json();
+  },
+
+  async addAgent(data: {
+    name: string;
+    email: string;
+    phone: string;
+    specialty?: string;
+    commission_rate?: number;
+    status?: string;
+  }): Promise<void> {
+    const res = await fetch(`${API_URL}/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to create agent');
+  },
 };

@@ -14,7 +14,7 @@ import {
   Shield,
   UserCheck,
 } from 'lucide-react';
-import { logout } from '@/src/utils/auth';
+import { logout } from '@/src/auth';
 
 interface AgentLayoutProps {
   children: React.ReactNode;

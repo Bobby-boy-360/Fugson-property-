@@ -15,7 +15,7 @@ import {
   Calendar,
   DollarSign,
 } from 'lucide-react';
-import { formatNaira } from '@/src/utils/auth';
+import { formatNaira } from '@/src/auth';
 import ProfitLossCharts from './ProfitLossCharts';
 
 export default function AdminReportsView() {

@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { PropertyItem } from '@/src/types';
 import { propertyService } from '@/src/services/propertyService';
-import { formatNaira } from '@/src/utils/auth';
+import { formatNaira } from '@/src/auth';
 
 interface AdminPropertiesViewProps {
   onFilterTenantsByProperty?: (propertyName: string) => void;

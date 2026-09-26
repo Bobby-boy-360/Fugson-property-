@@ -1,16 +1,17 @@
 import { ShortletItem, ShortletBooking } from '../types';
-import { MOCK_SHORTLETS, MOCK_SHORTLET_BOOKINGS } from '../data/mockData';
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const API_URL = 'https://propertypro-backend-production-ba1d.up.railway.app/api';
 
 export const shortletService = {
   async getShortlets(): Promise<ShortletItem[]> {
-    await delay(200);
-    return MOCK_SHORTLETS;
+    const res = await fetch(`${API_URL}/shortlet`);
+    if (!res.ok) throw new Error('Failed to fetch shortlets');
+    return res.json();
   },
-  
+
   async getBookings(): Promise<ShortletBooking[]> {
-    await delay(200);
-    return MOCK_SHORTLET_BOOKINGS;
+    const res = await fetch(`${API_URL}/shortlet/bookings`);
+    if (!res.ok) throw new Error('Failed to fetch bookings');
+    return res.json();
   }
 };

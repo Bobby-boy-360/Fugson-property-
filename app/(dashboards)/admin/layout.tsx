@@ -17,7 +17,7 @@ import {
   ShieldAlert,
   Search,
 } from 'lucide-react';
-import { logout } from '@/src/utils/auth';
+import { logout } from '@/src/auth';
 
 interface AdminLayoutProps {
   children: React.ReactNode;

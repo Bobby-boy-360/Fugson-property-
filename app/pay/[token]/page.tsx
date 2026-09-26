@@ -26,7 +26,7 @@ import {
   Check,
   BadgeAlert,
 } from 'lucide-react';
-import { formatNaira, getCurrentUser, logout } from '@/src/utils/auth';
+import { formatNaira, getCurrentUser, logout } from '@/src/auth';
 import { HOUSE_RULES, INITIAL_TENANT_PAYMENTS } from '@/src/data/mockData';
 import { PaymentRecord } from '@/src/types';
 

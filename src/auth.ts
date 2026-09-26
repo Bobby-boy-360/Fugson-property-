@@ -1,4 +1,4 @@
-import { UserRole, AuthUser } from '../types';
+import { UserRole, AuthUser } from './types';
 
 const AUTH_COOKIE_NAME = 'auth_token';
 

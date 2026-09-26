@@ -1,40 +1,68 @@
 import { PaymentRecord, MisconductRecord } from '../types';
-import { INITIAL_TENANT_PAYMENTS } from '../data/mockData';
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const API_URL = 'https://propertypro-backend-production-ba1d.up.railway.app/api';
 
 export const tenantService = {
   async getTenants(): Promise<PaymentRecord[]> {
-    await delay(200);
-    return INITIAL_TENANT_PAYMENTS;
+    const res = await fetch(`${API_URL}/tenants`);
+    if (!res.ok) throw new Error('Failed to fetch tenants');
+    return res.json();
   },
 
   async getTenantsByAgent(agentId: string): Promise<PaymentRecord[]> {
-    await delay(200);
-    return INITIAL_TENANT_PAYMENTS.filter((t) => t.agentId === agentId);
+    const res = await fetch(`${API_URL}/tenants/by-agent/${agentId}`);
+    if (!res.ok) throw new Error('Failed to fetch tenants for agent');
+    return res.json();
   },
 
   async getTenantById(id: string): Promise<PaymentRecord | undefined> {
-    await delay(200);
-    return INITIAL_TENANT_PAYMENTS.find((t) => t.id === id);
+    const res = await fetch(`${API_URL}/tenants/${id}`);
+    if (res.status === 404) return undefined;
+    if (!res.ok) throw new Error('Failed to fetch tenant');
+    return res.json();
+  },
+
+  async addTenant(data: {
+    property_id: string;
+    name: string;
+    email: string;
+    phone: string;
+    rent_amount: number;
+    rent_cycle?: string;
+    multi_year_eligible?: boolean;
+  }): Promise<void> {
+    const res = await fetch(`${API_URL}/tenants`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to create tenant');
   },
 
   async addMisconduct(tenantId: string, misconduct: MisconductRecord): Promise<boolean> {
-    await delay(200);
-    // In a real app, this would be an API call to a backend
-    console.log(`Adding misconduct to tenant ${tenantId}`, misconduct);
-    return true;
+    const res = await fetch(`${API_URL}/tenants/${tenantId}/misconduct`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(misconduct),
+    });
+    return res.ok;
   },
 
   async remitCommission(tenantId: string, reference?: string): Promise<boolean> {
-    await delay(200);
-    console.log(`Remitting commission for tenant ${tenantId}, ref: ${reference}`);
-    return true;
+    const res = await fetch(`${API_URL}/tenants/${tenantId}/remit-commission`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reference }),
+    });
+    return res.ok;
   },
 
   async toggleMultiYear(tenantId: string, isEligible: boolean): Promise<boolean> {
-    await delay(200);
-    console.log(`Toggling multi-year for tenant ${tenantId} to ${isEligible}`);
-    return true;
-  }
+    const res = await fetch(`${API_URL}/tenants/${tenantId}/multi-year`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isEligible }),
+    });
+    return res.ok;
+  },
 };

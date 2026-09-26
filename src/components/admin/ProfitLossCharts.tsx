@@ -32,7 +32,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { financeService } from '@/src/services/financeService';
-import { formatNaira } from '@/src/utils/auth';
+import { formatNaira } from '@/src/auth';
 import { ProfitLossBreakdown, ProfitLossOverheads } from '@/src/types';
 
 export interface ExpenseLog {

@@ -1,16 +1,18 @@
 import { PropertyItem } from '../types';
-import { MOCK_PROPERTIES } from '../data/mockData';
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const API_URL = 'https://propertypro-backend-production-ba1d.up.railway.app/api';
 
 export const propertyService = {
   async getProperties(): Promise<PropertyItem[]> {
-    await delay(200);
-    return MOCK_PROPERTIES;
+    const res = await fetch(`${API_URL}/properties`);
+    if (!res.ok) throw new Error('Failed to fetch properties');
+    return res.json();
   },
 
   async getPropertyById(id: string): Promise<PropertyItem | undefined> {
-    await delay(200);
-    return MOCK_PROPERTIES.find((p) => p.id === id);
+    const res = await fetch(`${API_URL}/properties/${id}`);
+    if (res.status === 404) return undefined;
+    if (!res.ok) throw new Error('Failed to fetch property');
+    return res.json();
   },
 };

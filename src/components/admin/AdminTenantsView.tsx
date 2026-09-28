@@ -58,6 +58,9 @@ export default function AdminTenantsView({
   const [newTenantStatus, setNewTenantStatus] = useState<'Paid' | 'Overdue'>('Paid');
   const [newTenantLeasePeriod, setNewTenantLeasePeriod] = useState('01 Jan 2025 – 31 Dec 2025');
   const [newTenantAgent, setNewTenantAgent] = useState('Emeka Nwosu');
+  const [newTenantKinName, setNewTenantKinName] = useState('');
+  const [newTenantKinRelationship, setNewTenantKinRelationship] = useState('Spouse');
+  const [newTenantKinPhone, setNewTenantKinPhone] = useState('');
 
   const filteredTenants = tenants.filter((tenant) => {
     // Property specific filter
@@ -121,6 +124,12 @@ export default function AdminTenantsView({
       amountPaid: isPaid ? numAmount : 0,
       leasePeriod: newTenantLeasePeriod,
       phone: newTenantPhone.trim() || '+234 800 000 0000',
+      nextOfKinName: newTenantKinName.trim(),
+      nextOfKinRelationship: newTenantKinRelationship.trim(),
+      nextOfKinPhone: newTenantKinPhone.trim(),
+      emergencyContact: newTenantKinName.trim()
+        ? `${newTenantKinName.trim()} (${newTenantKinRelationship.trim()}) - ${newTenantKinPhone.trim()}`
+        : '',
       misconductStrikes: [],
     };
 
@@ -131,6 +140,8 @@ export default function AdminTenantsView({
     setNewTenantPhone('');
     setNewTenantProperty('');
     setNewTenantUnit('');
+    setNewTenantKinName('');
+    setNewTenantKinPhone('');
   };
 
   return (
@@ -629,6 +640,54 @@ export default function AdminTenantsView({
                     placeholder="Emeka Nwosu"
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-[#12897F]"
                   />
+                </div>
+              </div>
+
+              {/* Next of Kin Emergency Information */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2.5">
+                <span className="text-xs font-bold text-slate-800 block">
+                  Next of Kin / Emergency Contact (Accessible to Field Agents)
+                </span>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Kin Full Name</label>
+                  <input
+                    type="text"
+                    value={newTenantKinName}
+                    onChange={(e) => setNewTenantKinName(e.target.value)}
+                    placeholder="e.g. Babatunde Fashola"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-[#12897F]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Relationship</label>
+                    <select
+                      value={newTenantKinRelationship}
+                      onChange={(e) => setNewTenantKinRelationship(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-[#12897F]"
+                    >
+                      <option value="Spouse">Spouse</option>
+                      <option value="Sibling">Sibling</option>
+                      <option value="Parent">Parent</option>
+                      <option value="Child">Child</option>
+                      <option value="Next of Kin / Relative">Next of Kin / Relative</option>
+                      <option value="Legal Guardian">Legal Guardian</option>
+                      <option value="Business Associate">Business Associate</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Emergency Phone</label>
+                    <input
+                      type="tel"
+                      value={newTenantKinPhone}
+                      onChange={(e) => setNewTenantKinPhone(e.target.value)}
+                      placeholder="+234 801 234 5678"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-[#12897F]"
+                    />
+                  </div>
                 </div>
               </div>
 

@@ -21,7 +21,7 @@ import {
   Wrench,
   Wifi,
   ShieldCheck,
-  DollarSign,
+  Receipt,
   PieChart as PieIcon,
   BarChart3,
   Building,
@@ -244,7 +244,7 @@ export default function ProfitLossCharts() {
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
         <div>
           <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-            <DollarSign className="w-4 h-4 text-rose-500" />
+            <Receipt className="w-4 h-4 text-rose-500" />
             Interactive Operating Expense Logger
           </h2>
           <p className="text-xs text-slate-500 mt-1">Log property expenditures to instantly recalculate Net Operating Income (NOI) and margins.</p>

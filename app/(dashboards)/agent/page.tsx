@@ -16,12 +16,14 @@ import {
   ArrowUpRight,
   TrendingUp,
   Phone,
+  PhoneCall,
+  ShieldAlert,
+  Copy,
   Mail,
   Eye,
   Send,
   X,
   Wallet,
-  DollarSign,
   ChevronRight,
 } from 'lucide-react';
 import { propertyService } from '@/src/services/propertyService';
@@ -45,16 +47,27 @@ export default function AgentDashboardPage({
   const [assignedProperties, setAssignedProperties] = useState<PropertyItem[]>([]);
   const [agentPayments, setAgentPayments] = useState<PaymentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedEmergencyTenant, setSelectedEmergencyTenant] = useState<PaymentRecord | null>(null);
 
   React.useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
-      const [propsData, tenantsData] = await Promise.all([
+      const [propsData, allTenantsData] = await Promise.all([
         propertyService.getProperties(),
-        tenantService.getTenantsByAgent(currentAgentId)
+        tenantService.getTenants(),
       ]);
-      setAssignedProperties(propsData.filter((p) => p.assignedAgentId === currentAgentId));
-      setAgentPayments(tenantsData);
+      const myProps = propsData.filter((p) => p.assignedAgentId === currentAgentId);
+      const myPropNames = myProps.map((p) => p.name.toLowerCase());
+      setAssignedProperties(myProps);
+
+      // Available to agent: tenants explicitly assigned or within their assigned estates
+      const myTenants = allTenantsData.filter(
+        (t) =>
+          t.agentId === currentAgentId ||
+          myPropNames.includes(t.property.toLowerCase()) ||
+          !t.agentId
+      );
+      setAgentPayments(myTenants);
       setIsLoading(false);
     };
     fetchData();
@@ -127,6 +140,7 @@ export default function AgentDashboardPage({
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             {activeSection === 'My Properties' && 'My Assigned Properties'}
             {activeSection === 'My Tenants' && 'My Managed Tenants'}
+            {activeSection === 'Emergency Contacts' && 'Emergency Contacts & Next of Kin Directory'}
             {activeSection === 'Commission Tracker' && 'My Commission Ledger'}
           </h1>
           <p className="text-slate-500 text-xs sm:text-sm mt-0.5">
@@ -160,6 +174,19 @@ export default function AgentDashboardPage({
           >
             <Users className="w-3.5 h-3.5" />
             <span>Tenants ({agentPayments.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigateSection?.('Emergency Contacts')}
+            className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition shrink-0 cursor-pointer flex items-center gap-1.5 ${
+              activeSection === 'Emergency Contacts'
+                ? 'bg-rose-700 text-white shadow-2xs'
+                : 'bg-white border border-rose-200 text-rose-700 hover:bg-rose-50'
+            }`}
+          >
+            <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />
+            <span>Emergency Kin</span>
           </button>
 
           <button
@@ -336,7 +363,7 @@ export default function AgentDashboardPage({
                     <th className="py-3 px-4">Estate</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4">Owed / Paid</th>
-                    <th className="py-3 px-4">Phone / Email</th>
+                    <th className="py-3 px-4">Contact & Kin</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -382,13 +409,28 @@ export default function AgentDashboardPage({
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4 text-slate-600 font-mono text-[11px]">
-                        <div>{tenant.phone}</div>
-                        <div className="text-[10px] text-blue-600 font-sans font-semibold">[Email: Verified]</div>
+                      <td className="py-3.5 px-4 text-slate-600 text-[11px]">
+                        <div className="font-mono font-medium text-slate-900">{tenant.phone}</div>
+                        <div className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
+                          <span className="font-bold text-rose-700">Kin:</span>
+                          <span className="truncate max-w-[130px] text-slate-700">
+                            {tenant.nextOfKinName ? `${tenant.nextOfKinName} (${tenant.nextOfKinRelationship || 'Kin'})` : 'Registered'}
+                          </span>
+                        </div>
                       </td>
 
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedEmergencyTenant(tenant)}
+                            className="px-2.5 py-1.5 text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg transition flex items-center gap-1 cursor-pointer border border-rose-200"
+                            title="View Next of Kin & Emergency Protocol"
+                          >
+                            <PhoneCall className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Emergency Kin</span>
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => handleSendEmailInvoice(tenant)}
@@ -454,23 +496,51 @@ export default function AgentDashboardPage({
                     </div>
                   </div>
 
+                  {/* Next of Kin Emergency pill on card */}
+                  <div className="p-2.5 bg-rose-50/50 border border-rose-100 rounded-lg text-xs space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-semibold text-rose-800 flex items-center gap-1">
+                        <ShieldAlert className="w-3 h-3 text-rose-600" />
+                        Next of Kin:
+                      </span>
+                      <span className="font-bold text-slate-800">
+                        {tenant.nextOfKinName || 'Registered'} ({tenant.nextOfKinRelationship || 'Kin'})
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">Emergency Phone:</span>
+                      <span className="font-mono font-bold text-slate-900">
+                        {tenant.nextOfKinPhone || tenant.emergencyContact || tenant.phone}
+                      </span>
+                    </div>
+                  </div>
+
                   <div className="pt-1 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEmergencyTenant(tenant)}
+                      className="flex-1 py-2 text-center text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg transition flex items-center justify-center gap-1 border border-rose-200 cursor-pointer"
+                    >
+                      <PhoneCall className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Emergency Kin</span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => handleSendEmailInvoice(tenant)}
                       className="flex-1 py-2 text-center text-xs font-semibold bg-teal-50 hover:bg-teal-100 text-[#12897F] rounded-lg transition flex items-center justify-center gap-1 border border-teal-100 cursor-pointer"
                     >
                       <Mail className="w-3.5 h-3.5" />
-                      <span>Email Invoice</span>
+                      <span>Email</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => onViewTenantPOV?.(tenant.id)}
-                      className="flex-1 py-2 text-center text-xs font-semibold bg-[#12897F] text-white rounded-lg transition flex items-center justify-center gap-1"
+                      className="py-2 px-3 text-center text-xs font-semibold bg-[#12897F] text-white rounded-lg transition flex items-center justify-center gap-1 cursor-pointer"
                     >
                       <Eye className="w-3.5 h-3.5" />
-                      <span>Tenant POV</span>
+                      <span>POV</span>
                     </button>
                   </div>
                 </div>
@@ -613,6 +683,252 @@ export default function AgentDashboardPage({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* SECTION: EMERGENCY CONTACTS & NEXT OF KIN DIRECTORY */}
+      {activeSection === 'Emergency Contacts' && (
+        <div className="space-y-4">
+          <div className="bg-rose-900 text-white rounded-2xl p-5 shadow-sm space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-800 flex items-center justify-center text-rose-200">
+                  <ShieldAlert className="w-5 h-5 text-rose-300" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold">Emergency & Next of Kin Directory</h2>
+                  <p className="text-xs text-rose-200">
+                    High-priority reference for on-duty field agents during building hazards, fire, flood, or medical incidents.
+                  </p>
+                </div>
+              </div>
+              <span className="hidden sm:inline-flex px-3 py-1 bg-rose-800/80 rounded-full text-xs font-semibold text-rose-100 border border-rose-700">
+                {filteredTenants.length} Resident Dossiers
+              </span>
+            </div>
+          </div>
+
+          {/* Emergency Search & Quick Filter */}
+          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="text-xs text-slate-500">
+              Instant contact lookup for all tenants across your assigned estates.
+            </div>
+
+            <div className="relative w-full sm:w-72">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search tenant, estate, or kin name..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-rose-500"
+              />
+            </div>
+          </div>
+
+          {/* Emergency Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {filteredTenants.length === 0 ? (
+              <div className="col-span-full bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-400 text-xs">
+                No tenants match your emergency directory query.
+              </div>
+            ) : (
+              filteredTenants.map((tenant) => (
+                <div
+                  key={tenant.id}
+                  className="bg-white rounded-xl border-2 border-slate-200 hover:border-rose-300 p-4 space-y-3 shadow-2xs transition"
+                >
+                  <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm">{tenant.tenantName}</h3>
+                      <div className="text-xs text-slate-500 font-medium">
+                        {tenant.property} • <span className="font-bold text-slate-800">{tenant.unit}</span>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
+                      {tenant.status}
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-rose-50/70 border border-rose-200/80 rounded-lg space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-rose-800 flex items-center gap-1">
+                        <PhoneCall className="w-3 h-3 text-rose-600" />
+                        Next of Kin:
+                      </span>
+                      <span className="font-bold text-slate-900">
+                        {tenant.nextOfKinName || 'Registered Kin'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">Relationship:</span>
+                      <span className="font-semibold text-slate-700">
+                        {tenant.nextOfKinRelationship || 'Next of Kin'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">Emergency Phone:</span>
+                      <span className="font-mono font-bold text-rose-700">
+                        {tenant.nextOfKinPhone || tenant.emergencyContact || tenant.phone}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-0.5">
+                    <a
+                      href={`tel:${tenant.nextOfKinPhone || tenant.emergencyContact || tenant.phone}`}
+                      className="py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition shadow-2xs"
+                    >
+                      <PhoneCall className="w-3.5 h-3.5" />
+                      <span>Call Kin</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEmergencyTenant(tenant)}
+                      className="py-2 px-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 cursor-pointer transition"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Full Dossier</span>
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Emergency Contact & Next of Kin Dossier Modal */}
+      {selectedEmergencyTenant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity"
+            onClick={() => setSelectedEmergencyTenant(null)}
+          />
+          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden z-10 animate-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="bg-rose-900 p-5 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-rose-500/20 flex items-center justify-center text-rose-300">
+                  <PhoneCall className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base leading-tight">
+                    Emergency Contact & Next of Kin Dossier
+                  </h3>
+                  <p className="text-[11px] text-rose-200">
+                    Official agent emergency reference for building and medical incidents
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedEmergencyTenant(null)}
+                className="text-rose-200 hover:text-white p-1 rounded-lg hover:bg-white/10 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto text-xs text-slate-700">
+              {/* Tenant Profile Banner */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Resident Tenant</span>
+                  <div className="text-sm font-bold text-slate-900">{selectedEmergencyTenant.tenantName}</div>
+                  <div className="text-[11px] text-slate-600 mt-0.5">
+                    {selectedEmergencyTenant.property} • <span className="font-semibold text-slate-800">{selectedEmergencyTenant.unit}</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-slate-400 block font-semibold">Tenant Phone</span>
+                  <span className="font-mono font-bold text-slate-800 text-xs">{selectedEmergencyTenant.phone}</span>
+                </div>
+              </div>
+
+              {/* Next of Kin Card (High Priority Alert Styling) */}
+              <div className="p-4 bg-rose-50 border-2 border-rose-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-rose-950 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldAlert className="w-4 h-4 text-rose-600" />
+                    <span>Designated Next of Kin Details</span>
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-200 text-rose-800">
+                    Priority Contact
+                  </span>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-lg border border-rose-100 space-y-2.5">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="text-slate-500 text-xs">Full Name:</span>
+                    <span className="font-bold text-slate-900 text-sm">
+                      {selectedEmergencyTenant.nextOfKinName || 'Registered Next of Kin'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <span className="text-slate-500 text-xs">Relationship:</span>
+                    <span className="font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[11px]">
+                      {selectedEmergencyTenant.nextOfKinRelationship || 'Next of Kin'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 text-xs">Emergency Phone:</span>
+                    <span className="font-mono font-bold text-rose-700 text-sm">
+                      {selectedEmergencyTenant.nextOfKinPhone || selectedEmergencyTenant.emergencyContact || selectedEmergencyTenant.phone}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Call & Copy Actions */}
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <a
+                    href={`tel:${selectedEmergencyTenant.nextOfKinPhone || selectedEmergencyTenant.emergencyContact || selectedEmergencyTenant.phone}`}
+                    className="py-2.5 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-2xs transition"
+                  >
+                    <PhoneCall className="w-4 h-4" />
+                    <span>Call Next of Kin</span>
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const text = `${selectedEmergencyTenant.nextOfKinName || 'Next of Kin'} (${selectedEmergencyTenant.nextOfKinRelationship || 'Kin'}): ${selectedEmergencyTenant.nextOfKinPhone || selectedEmergencyTenant.emergencyContact || selectedEmergencyTenant.phone}`;
+                      navigator.clipboard?.writeText(text);
+                      showToast(`Copied Next of Kin contact details for ${selectedEmergencyTenant.tenantName}`);
+                    }}
+                    className="py-2.5 px-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+                  >
+                    <Copy className="w-4 h-4 text-slate-500" />
+                    <span>Copy Phone Number</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Agent Incident Protocol Notice */}
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
+                <span className="font-bold text-amber-900 text-xs block">Agent Incident Protocol</span>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  In case of building fire, flood hazard, police/security incident, or unresponsive tenant wellness check, contact estate security immediately. Reach the designated Next of Kin to provide incident status.
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedEmergencyTenant(null)}
+                className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold text-xs rounded-lg cursor-pointer"
+              >
+                Close Dossier
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -11,13 +11,14 @@ import {
   Phone,
   Home,
   Calendar,
-  DollarSign,
   CheckCircle2,
   ShieldCheck,
   BookOpen,
   Clock,
   X,
   FileText,
+  ShieldAlert,
+  HelpCircle,
 } from 'lucide-react';
 import { authService } from '@/src/services/authService';
 import { propertyService } from '@/src/services/propertyService';
@@ -49,9 +50,12 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
   const [signupUnit, setSignupUnit] = useState('');
   const [signupRent, setSignupRent] = useState<number>(2000000);
   const [signupLeasePeriod, setSignupLeasePeriod] = useState('01 Jan 2025 – 31 Dec 2025');
-  const [signupEmergency, setSignupEmergency] = useState('');
+  const [signupNextOfKinName, setSignupNextOfKinName] = useState('');
+  const [signupNextOfKinRelationship, setSignupNextOfKinRelationship] = useState('Spouse');
+  const [signupNextOfKinPhone, setSignupNextOfKinPhone] = useState('');
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [showHouseRulesModal, setShowHouseRulesModal] = useState(false);
+  const [rulesModalTab, setRulesModalTab] = useState<'RULES' | 'TERMS' | 'PRIVACY'>('RULES');
 
   // Available properties from portfolio
   const [availableProperties, setAvailableProperties] = useState<PropertyItem[]>([]);
@@ -113,7 +117,7 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
     }
 
     if (!agreeTerms) {
-      setError('Please review and check "i agree to fugson properties official house rules" to complete registration.');
+      setError('Please review and check "I agree to the Terms and Conditions and Privacy Policy of Fugson Properties" to complete registration.');
       return;
     }
 
@@ -127,8 +131,12 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
     try {
       /**
        * PLUG & PLAY BACKEND INTEGRATION:
-       * Dispatches signup payload to authService (which is wired ready for REST/Postgres endpoint)
+       * Dispatches structured signup payload to authService (ready for REST/Postgres endpoint)
        */
+      const formattedEmergency = signupNextOfKinName
+        ? `${signupNextOfKinName.trim()} (${signupNextOfKinRelationship.trim()}) - ${signupNextOfKinPhone.trim()}`
+        : '';
+
       const { user, tenant } = await authService.signupTenant({
         fullName: signupName.trim(),
         email: signupEmail.trim(),
@@ -138,7 +146,10 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
         unit: signupUnit.trim() || 'Apartment 1A',
         rentAmount: Number(signupRent) || 2000000,
         leasePeriod: signupLeasePeriod,
-        emergencyContact: signupEmergency.trim(),
+        nextOfKinName: signupNextOfKinName.trim(),
+        nextOfKinRelationship: signupNextOfKinRelationship.trim(),
+        nextOfKinPhone: signupNextOfKinPhone.trim(),
+        emergencyContact: formattedEmergency,
       });
 
       setSuccessMessage(`Account created successfully for ${tenant.tenantName}! Redirecting to your verified Tenant Portal...`);
@@ -448,7 +459,7 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
                   Annual Rent (₦) <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
-                  <DollarSign className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+                  <span className="w-4 h-4 text-slate-500 font-bold text-xs absolute left-3 top-2.5 select-none">₦</span>
                   <input
                     type="number"
                     min="100000"
@@ -462,58 +473,115 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
               </div>
             </div>
 
-            {/* Lease Period & Emergency Contact */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Lease Period</label>
-                <div className="relative">
-                  <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="text"
-                    value={signupLeasePeriod}
-                    onChange={(e) => setSignupLeasePeriod(e.target.value)}
-                    placeholder="01 Jan 2025 – 31 Dec 2025"
-                    className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-[#12897F]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Emergency Contact (Next of Kin)</label>
+            {/* Lease Period */}
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Lease Period</label>
+              <div className="relative">
+                <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
                 <input
                   type="text"
-                  value={signupEmergency}
-                  onChange={(e) => setSignupEmergency(e.target.value)}
-                  placeholder="Name & Contact phone"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 outline-none focus:ring-2 focus:ring-[#12897F]"
+                  value={signupLeasePeriod}
+                  onChange={(e) => setSignupLeasePeriod(e.target.value)}
+                  placeholder="01 Jan 2025 – 31 Dec 2025"
+                  className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-[#12897F]"
                 />
               </div>
             </div>
 
-            {/* Rules & Policy Preview Link / Trigger */}
-            <div className="bg-teal-50/80 border border-teal-200/80 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <div className="flex items-start gap-2.5">
-                <BookOpen className="w-4 h-4 text-[#12897F] shrink-0 mt-0.5" />
+            {/* Next of Kin & Emergency Contact (Separated & Well-Organized) */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+              <div className="flex items-start justify-between gap-2">
                 <div>
-                  <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5 flex-wrap">
-                    <span>House Rules, Policies & Guidelines</span>
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded-md">
-                      <Clock className="w-2.5 h-2.5" /> Quiet Hours: 10PM – 7AM
-                    </span>
+                  <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-[#12897F]" />
+                    <span>Next of Kin & Emergency Contact</span>
                   </div>
-                  <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">
-                    Review official resident obligations, community guidelines, sanitation, and safety policies.
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Separated for clarity. Made accessible to estate agents and management in case of emergencies.
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowHouseRulesModal(true)}
-                className="px-3 py-1.5 bg-[#12897F] hover:bg-[#0e6e66] text-white text-[11px] font-bold rounded-lg shadow-2xs transition cursor-pointer flex items-center justify-center gap-1 shrink-0 self-start sm:self-auto"
-              >
-                <span>Click to see rules, policy, etc.</span>
-                <ArrowRight className="w-3 h-3" />
-              </button>
+
+              <div className="space-y-2.5">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Next of Kin Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={signupNextOfKinName}
+                    onChange={(e) => setSignupNextOfKinName(e.target.value)}
+                    placeholder="e.g. Amina Bello"
+                    className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-[#12897F]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Relationship
+                    </label>
+                    <select
+                      value={signupNextOfKinRelationship}
+                      onChange={(e) => setSignupNextOfKinRelationship(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-[#12897F]"
+                    >
+                      <option value="Spouse">Spouse</option>
+                      <option value="Sibling">Sibling</option>
+                      <option value="Parent">Parent</option>
+                      <option value="Child">Child / Dependent</option>
+                      <option value="Next of Kin / Relative">Next of Kin / Relative</option>
+                      <option value="Legal Guardian">Legal Guardian</option>
+                      <option value="Business Associate">Business Associate</option>
+                      <option value="Close Friend">Close Friend</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Emergency Phone Number
+                    </label>
+                    <div className="relative">
+                      <Phone className="w-3 h-3 text-slate-400 absolute left-2.5 top-2.5" />
+                      <input
+                        type="tel"
+                        value={signupNextOfKinPhone}
+                        onChange={(e) => setSignupNextOfKinPhone(e.target.value)}
+                        placeholder="+234 801 234 5678"
+                        className="w-full pl-7 pr-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-[#12897F]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Tenancy Policies Trigger Card */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-teal-500/10 text-[#12897F] flex items-center justify-center shrink-0 mt-0.5">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                      <span>Tenancy Terms, House Rules & Privacy Policy</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                      Review community quiet hours (10:00 PM – 7:00 AM), payment terms in Naira (₦), and emergency protocols.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowHouseRulesModal(true)}
+                  className="px-3 py-1.5 bg-white hover:bg-slate-100 text-[#12897F] border border-teal-200 text-[11px] font-bold rounded-lg shadow-2xs transition cursor-pointer flex items-center gap-1 shrink-0 self-start sm:self-auto"
+                >
+                  <span>Review Policies</span>
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
             </div>
 
             {/* Terms checkbox */}
@@ -526,7 +594,7 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
                   className="rounded text-[#12897F] focus:ring-[#12897F] mt-0.5 cursor-pointer w-4 h-4"
                 />
                 <span className="text-xs leading-tight font-medium text-slate-800">
-                  i agree to fugson properties official house rules
+                  I agree to the Terms and Conditions and Privacy Policy of Fugson Properties.
                 </span>
               </label>
             </div>
@@ -585,14 +653,14 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
         </div>
       </div>
 
-      {/* House Rules & Policies Modal */}
+      {/* House Rules, Terms & Policies Modal */}
       {showHouseRulesModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity"
             onClick={() => setShowHouseRulesModal(false)}
           />
-          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden z-10 animate-in zoom-in-95 duration-150 flex flex-col max-h-[88vh]">
+          <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl overflow-hidden z-10 animate-in zoom-in-95 duration-150 flex flex-col max-h-[88vh]">
             {/* Modal Header */}
             <div className="bg-[#0B1D2E] p-5 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
@@ -601,10 +669,10 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
                 </div>
                 <div>
                   <h3 className="font-bold text-sm sm:text-base leading-tight">
-                    Fugson Properties Official House Rules
+                    Fugson Properties Tenancy Legal Documents
                   </h3>
                   <p className="text-[11px] text-teal-300">
-                    Tenancy Agreement & Community Policy Guidelines
+                    Terms & Conditions, Official House Rules & Privacy Policy
                   </p>
                 </div>
               </div>
@@ -617,35 +685,153 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
               </button>
             </div>
 
-            {/* Quiet Hours Banner */}
-            <div className="bg-amber-50 border-b border-amber-200/80 p-3.5 flex items-start gap-3 shrink-0">
-              <div className="w-7 h-7 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0 mt-0.5">
-                <Clock className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-amber-900">
-                  Key Policy Notice: Mandatory Quiet Hours (10:00 PM – 7:00 AM)
-                </p>
-                <p className="text-[11px] text-amber-800/90 mt-0.5 leading-relaxed">
-                  To ensure comfort and rest for all residents across all Fugson properties, high decibel sound equipment, parties, and disruptive noise are prohibited during these hours.
-                </p>
-              </div>
+            {/* Document Tabs */}
+            <div className="flex border-b border-slate-200 bg-slate-50 px-4 pt-2 gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setRulesModalTab('RULES')}
+                className={`px-3 py-2 text-xs font-semibold rounded-t-lg transition border-b-2 cursor-pointer ${
+                  rulesModalTab === 'RULES'
+                    ? 'border-[#12897F] text-[#12897F] bg-white'
+                    : 'border-transparent text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                House Rules (8)
+              </button>
+              <button
+                type="button"
+                onClick={() => setRulesModalTab('TERMS')}
+                className={`px-3 py-2 text-xs font-semibold rounded-t-lg transition border-b-2 cursor-pointer ${
+                  rulesModalTab === 'TERMS'
+                    ? 'border-[#12897F] text-[#12897F] bg-white'
+                    : 'border-transparent text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Terms & Conditions
+              </button>
+              <button
+                type="button"
+                onClick={() => setRulesModalTab('PRIVACY')}
+                className={`px-3 py-2 text-xs font-semibold rounded-t-lg transition border-b-2 cursor-pointer ${
+                  rulesModalTab === 'PRIVACY'
+                    ? 'border-[#12897F] text-[#12897F] bg-white'
+                    : 'border-transparent text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Privacy & Next of Kin Consent
+              </button>
             </div>
 
-            {/* Rules Content */}
-            <div className="p-5 space-y-4 text-xs text-slate-600 overflow-y-auto divide-y divide-slate-100">
-              {HOUSE_RULES.map((rule, idx) => (
-                <div key={idx} className="pt-3 first:pt-0">
-                  <h4 className="font-bold text-slate-900 text-xs sm:text-sm mb-1 flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#12897F]" />
-                    {rule.title}
-                  </h4>
-                  <p className="text-slate-600 leading-relaxed pl-3.5 text-xs">
-                    {rule.rule}
+            {/* TAB 1: HOUSE RULES */}
+            {rulesModalTab === 'RULES' && (
+              <div className="overflow-y-auto flex-1">
+                {/* Quiet Hours Banner */}
+                <div className="bg-amber-50 border-b border-amber-200/80 p-3.5 flex items-start gap-3 shrink-0">
+                  <div className="w-7 h-7 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0 mt-0.5">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-amber-900">
+                      Mandatory Quiet Hours: 10:00 PM – 7:00 AM Daily
+                    </p>
+                    <p className="text-[11px] text-amber-800/90 mt-0.5 leading-relaxed">
+                      All residents across Fugson properties must observe peaceful tranquility. High decibel sound equipment and loud disturbances are strictly prohibited during these hours.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-5 space-y-4 text-xs text-slate-600 divide-y divide-slate-100">
+                  {HOUSE_RULES.map((rule, idx) => (
+                    <div key={idx} className="pt-3 first:pt-0">
+                      <h4 className="font-bold text-slate-900 text-xs sm:text-sm mb-1 flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#12897F]" />
+                        {rule.title}
+                      </h4>
+                      <p className="text-slate-600 leading-relaxed pl-3.5 text-xs">
+                        {rule.rule}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: TERMS AND CONDITIONS */}
+            {rulesModalTab === 'TERMS' && (
+              <div className="overflow-y-auto flex-1 p-5 space-y-4 text-xs text-slate-600">
+                <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl space-y-1">
+                  <h4 className="font-bold text-[#12897F] text-xs">Official Tenancy Agreement Framework</h4>
+                  <p className="text-[11px] text-teal-800 leading-relaxed">
+                    By registering as a tenant under Fugson Properties, you agree to comply with the terms and statutory property regulations governed under Nigerian Tenancy Law.
                   </p>
                 </div>
-              ))}
-            </div>
+
+                <div className="space-y-3 divide-y divide-slate-100">
+                  <div className="pt-2 first:pt-0">
+                    <h5 className="font-bold text-slate-900 mb-1">1. Rent Denomination & Nigerian Naira (₦) Currency Protocol</h5>
+                    <p className="leading-relaxed">
+                      All rents, annual renewals, caution deposits, and recurring facility service charges are denominated and payable strictly in Nigerian Naira (₦). Electronic bank settlements are verified through unique Fugson virtual account tokens.
+                    </p>
+                  </div>
+
+                  <div className="pt-3">
+                    <h5 className="font-bold text-slate-900 mb-1">2. Payment Timelines & 5-Day Grace Period</h5>
+                    <p className="leading-relaxed">
+                      Rent must be paid on or before the anniversary of the lease start date. A grace period of 5 calendar days is observed before automated overdue notices are generated and communicated to the tenant and assigned field agents.
+                    </p>
+                  </div>
+
+                  <div className="pt-3">
+                    <h5 className="font-bold text-slate-900 mb-1">3. Maintenance Obligations & Property Inspection</h5>
+                    <p className="leading-relaxed">
+                      Tenants must immediately report water leakage, electrical hazards, or structural damage via the tenant maintenance portal. Authorized Fugson agents may inspect premises with 24 hours prior written or electronic notice, except in emergency crises where immediate access is warranted.
+                    </p>
+                  </div>
+
+                  <div className="pt-3">
+                    <h5 className="font-bold text-slate-900 mb-1">4. Prohibited Uses & Unauthorized Subletting</h5>
+                    <p className="leading-relaxed">
+                      Tenants shall not sublet or part with possession of the premises or any part thereof without express written consent from Fugson Properties management. Residential units may not be converted to commercial warehouse storage or high-traffic unauthorized activities.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: PRIVACY POLICY & EMERGENCY PROTOCOL */}
+            {rulesModalTab === 'PRIVACY' && (
+              <div className="overflow-y-auto flex-1 p-5 space-y-4 text-xs text-slate-600">
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-1">
+                  <h4 className="font-bold text-blue-900 text-xs">Data Protection & Next of Kin Emergency Protocol</h4>
+                  <p className="text-[11px] text-blue-800 leading-relaxed">
+                    Compliant with the Nigeria Data Protection Act (NDPA). Learn how your data and emergency contact information are securely handled.
+                  </p>
+                </div>
+
+                <div className="space-y-3 divide-y divide-slate-100">
+                  <div className="pt-2 first:pt-0">
+                    <h5 className="font-bold text-slate-900 mb-1">1. Purpose of Next of Kin Information</h5>
+                    <p className="leading-relaxed">
+                      Your Next of Kin and Emergency Contact details (Name, Relationship, Phone Number) are collected solely to safeguard resident life and property. In the event of a fire outbreak, plumbing flooding, medical emergency, security lockdown, or prolonged unresponsive tenant access, designated estate field agents and management are empowered to reach your emergency contact.
+                    </p>
+                  </div>
+
+                  <div className="pt-3">
+                    <h5 className="font-bold text-slate-900 mb-1">2. Access Control for Field Agents</h5>
+                    <p className="leading-relaxed">
+                      Only authorized field agents assigned to your specific estate corridor have view access to emergency contact details. Personal information is never sold, leased, or disclosed to unauthorized third parties or marketing affiliates.
+                    </p>
+                  </div>
+
+                  <div className="pt-3">
+                    <h5 className="font-bold text-slate-900 mb-1">3. Electronic Records & Data Retention</h5>
+                    <p className="leading-relaxed">
+                      Tenancy agreements, rent receipts, payment tokens, and incident logs are stored securely using encrypted cloud database protocols. Tenants may request updates to their next of kin records at any time by contacting estate administration.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Modal Actions */}
             <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
@@ -665,7 +851,7 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
                 className="px-4 py-2 bg-[#12897F] hover:bg-[#0e6e66] text-white text-xs font-bold rounded-lg shadow-2xs transition cursor-pointer flex items-center gap-1.5"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Agree & Accept House Rules</span>
+                <span>I Agree to Terms & Conditions and Privacy Policy</span>
               </button>
             </div>
           </div>

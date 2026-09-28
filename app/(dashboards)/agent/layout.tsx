@@ -12,6 +12,7 @@ import {
   X,
   ChevronRight,
   Shield,
+  ShieldAlert,
   UserCheck,
 } from 'lucide-react';
 import { logout, getCurrentUser } from '@/src/utils/auth';
@@ -50,6 +51,7 @@ export default function AgentLayout({
   const agentNavItems = [
     { label: 'My Properties', icon: Building, href: '/agent/properties' },
     { label: 'My Tenants', icon: Users, href: '/agent/tenants' },
+    { label: 'Emergency Contacts', icon: ShieldAlert, href: '/agent/emergency' },
     { label: 'Commission Tracker', icon: BadgePercent, href: '/agent/commissions' },
   ];
 

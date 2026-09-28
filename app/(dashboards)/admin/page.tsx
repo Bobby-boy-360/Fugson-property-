@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import {
-  DollarSign,
+  PhoneCall,
   Clock,
   Wallet,
   Search,
@@ -24,6 +24,7 @@ import {
   SlidersHorizontal,
   Mail,
   Trash2,
+  Download,
 } from 'lucide-react';
 import { PaymentRecord, MisconductRecord } from '@/src/types';
 import { tenantService } from '@/src/services/tenantService';
@@ -261,6 +262,84 @@ export default function AdminDashboardPage({
     showToast(`Tenant "${newTenant.tenantName}" registered successfully.`);
   };
 
+  const handleDownloadPaymentLedgerCSV = () => {
+    const recordsToExport = filteredDashboardPayments.length > 0 ? filteredDashboardPayments : payments;
+    if (recordsToExport.length === 0) {
+      showToast('No payment records available to export.');
+      return;
+    }
+
+    const headers = [
+      'Transaction ID',
+      'Tenant Name',
+      'Tenant Email',
+      'Tenant Phone',
+      'Property / Estate',
+      'Unit',
+      'Status',
+      'Total Rent (NGN)',
+      'Amount Paid (NGN)',
+      'Amount Owed (NGN)',
+      'Lease Period',
+      'Payment Date',
+      'Due Date',
+      'Receipt Ref',
+      'Managing Agent',
+      'Agent Commission (NGN)',
+      'Commission Remitted',
+      'Next of Kin Name',
+      'Next of Kin Relationship',
+      'Next of Kin Phone',
+    ];
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const csvRows = [
+      ['"FUGSON PROPERTY - RECENT PAYMENT LEDGER EXPORT"'],
+      [`"Export Date: ${todayStr}"`, `"Total Records: ${recordsToExport.length}"`, `"Filter Status: ${filterStatus}"`],
+      [],
+      headers,
+    ];
+
+    recordsToExport.forEach((p) => {
+      csvRows.push([
+        `"${p.id}"`,
+        `"${(p.tenantName || '').replace(/"/g, '""')}"`,
+        `"${(p.tenantEmail || '').replace(/"/g, '""')}"`,
+        `"${(p.phone || '').replace(/"/g, '""')}"`,
+        `"${(p.property || '').replace(/"/g, '""')}"`,
+        `"${(p.unit || '').replace(/"/g, '""')}"`,
+        `"${p.status}"`,
+        p.amount.toString(),
+        (p.amountPaid || (p.status === 'Paid' ? p.amount : 0)).toString(),
+        (p.amountOwed || (p.status === 'Overdue' ? p.amount : 0)).toString(),
+        `"${(p.leasePeriod || '').replace(/"/g, '""')}"`,
+        `"${p.date || ''}"`,
+        `"${p.dueDate || ''}"`,
+        `"${p.receiptNumber || 'N/A'}"`,
+        `"${(p.agentName || 'Emeka Nwosu').replace(/"/g, '""')}"`,
+        (p.agentCommissionAmount || 0).toString(),
+        `"${p.agentCommissionRemitted ? 'Yes' : 'No'}"`,
+        `"${(p.nextOfKinName || '').replace(/"/g, '""')}"`,
+        `"${(p.nextOfKinRelationship || '').replace(/"/g, '""')}"`,
+        `"${(p.nextOfKinPhone || p.emergencyContact || '').replace(/"/g, '""')}"`,
+      ]);
+    });
+
+    const csvString = csvRows.map((e) => e.join(',')).join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Fugson_Payment_Ledger_${todayStr}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showToast(`Payment ledger (${recordsToExport.length} records) exported to CSV.`);
+  };
+
   return (
     <div className="relative space-y-6">
       {/* Toast Alert */}
@@ -381,7 +460,7 @@ export default function AdminDashboardPage({
                 </span>
               </div>
               <div className="w-12 h-12 rounded-xl bg-teal-50 text-[#12897F] flex items-center justify-center shrink-0 border border-teal-100">
-                <DollarSign className="w-6 h-6" />
+                <span className="text-xl font-black select-none">₦</span>
               </div>
             </div>
 
@@ -485,6 +564,17 @@ export default function AdminDashboardPage({
                     className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-[#12897F]"
                   />
                 </div>
+
+                {/* Download CSV Button */}
+                <button
+                  type="button"
+                  onClick={handleDownloadPaymentLedgerCSV}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg shadow-2xs transition cursor-pointer shrink-0"
+                  title="Export Payment Ledger to CSV"
+                >
+                  <Download className="w-3.5 h-3.5 text-[#12897F]" />
+                  <span>Download CSV</span>
+                </button>
               </div>
             </div>
 
@@ -806,6 +896,70 @@ export default function AdminDashboardPage({
                   <Eye className="w-4 h-4" />
                   <span>Inspect Tenant POV for {selectedTenant.tenantName} →</span>
                 </button>
+
+                {/* Emergency Contact & Next of Kin Dossier */}
+                <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/40 space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center">
+                        <PhoneCall className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-900">
+                          Emergency Contact & Next of Kin
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Accessible for building emergencies & critical notices
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full border border-rose-200 shrink-0">
+                      Emergency Kin
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-lg border border-rose-100 space-y-2 text-xs">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                      <span className="text-slate-500 text-[11px]">Next of Kin Name:</span>
+                      <span className="font-bold text-slate-800">
+                        {selectedTenant.nextOfKinName || 'Amina Adeleke (Registered Kin)'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                      <span className="text-slate-500 text-[11px]">Relationship:</span>
+                      <span className="font-semibold text-slate-700">
+                        {selectedTenant.nextOfKinRelationship || 'Next of Kin'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 text-[11px]">Emergency Phone:</span>
+                      <span className="font-mono font-bold text-slate-900">
+                        {selectedTenant.nextOfKinPhone || selectedTenant.emergencyContact || '+234 803 456 7890'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <a
+                      href={`tel:${selectedTenant.nextOfKinPhone || selectedTenant.emergencyContact || '+2348034567890'}`}
+                      className="py-1.5 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <PhoneCall className="w-3 h-3" />
+                      <span>Call Kin</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const kinInfo = `${selectedTenant.nextOfKinName || 'Next of Kin'} (${selectedTenant.nextOfKinRelationship || 'Kin'}): ${selectedTenant.nextOfKinPhone || selectedTenant.emergencyContact || 'N/A'}`;
+                        navigator.clipboard?.writeText(kinInfo);
+                        showToast(`Copied emergency kin details for ${selectedTenant.tenantName}`);
+                      }}
+                      className="py-1.5 px-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg font-semibold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Copy Details</span>
+                    </button>
+                  </div>
+                </div>
 
                 {/* Email Invoicing & Statements Section */}
                 <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3 shadow-2xs">

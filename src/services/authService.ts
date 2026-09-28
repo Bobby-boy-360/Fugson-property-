@@ -1,6 +1,7 @@
 import { AuthUser, UserRole, TenantSignupPayload, PaymentRecord } from '../types';
 import { getCurrentUser, loginAs, logout } from '../utils/auth';
 import { tenantService } from './tenantService';
+import { propertyService } from './propertyService';
 
 // Simulated network delay
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -83,6 +84,14 @@ export const authService = {
     const tenantId = `fg-tenant-${Date.now().toString().slice(-6)}`;
     const numAmount = Number(payload.rentAmount) || 2000000;
 
+    // Link assigned field agent from matching estate portfolio
+    const properties = await propertyService.getProperties();
+    const matchedProp = properties.find(
+      (p) => p.name.toLowerCase() === payload.property.trim().toLowerCase()
+    );
+    const assignedAgentId = matchedProp?.assignedAgentId || 'agent-01';
+    const assignedAgentName = matchedProp?.assignedAgent || 'Emeka Nwosu';
+
     const newTenant: PaymentRecord = {
       id: tenantId,
       tenantName: payload.fullName.trim(),
@@ -97,6 +106,10 @@ export const authService = {
       date: new Date().toISOString().split('T')[0],
       dueDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
       receiptNumber: 'REC-PENDING',
+      agentId: assignedAgentId,
+      agentName: assignedAgentName,
+      agentCommissionAmount: Math.round(numAmount * 0.05),
+      agentCommissionRemitted: false,
       leasePeriod: payload.leasePeriod || '01 Jan 2025 – 31 Dec 2025',
       nextOfKinName: payload.nextOfKinName?.trim() || '',
       nextOfKinRelationship: payload.nextOfKinRelationship?.trim() || 'Next of Kin',

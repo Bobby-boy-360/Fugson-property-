@@ -56,6 +56,7 @@ export interface PaymentRecord {
   amountOwed: number;
   amountPaid: number;
   leasePeriod: string;
+  leaseYears?: number;
   phone: string;
   misconductStrikes: MisconductRecord[];
 }
@@ -73,7 +74,7 @@ export interface MisconductRecord {
 export interface PropertyItem {
   id: string;
   name: string;
-  type: 'Farmland' | 'Residential' | 'Commercial' | 'Commercial Agro-Hub' | 'Shortlet Villa';
+  type: 'Residential' | 'Commercial' | 'Mixed-Use Development' | 'Shortlet Villa';
   location: string;
   units: number;
   occupiedUnits: number;
@@ -87,7 +88,7 @@ export interface MaintenanceComplaint {
   id: string;
   tenantName: string;
   property: string;
-  category: 'Plumbing' | 'Electrical' | 'Irrigation / Well' | 'Structural' | 'Gate & Security';
+  category: 'Plumbing' | 'Electrical' | 'HVAC & Cooling' | 'Structural' | 'Gate & Security';
   description: string;
   priority: 'Low' | 'Medium' | 'High' | 'Emergency';
   submittedAt: string;

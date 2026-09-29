@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   X,
   ExternalLink,
-  DollarSign,
   ArrowUpRight,
   ShieldCheck,
   Plus,

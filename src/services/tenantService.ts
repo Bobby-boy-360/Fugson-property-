@@ -1,68 +1,118 @@
 import { PaymentRecord, MisconductRecord } from '../types';
+import { INITIAL_TENANT_PAYMENTS } from '../data/mockData';
 
-const API_URL = 'https://propertypro-backend-production-ba1d.up.railway.app/api';
+const STORAGE_KEY = 'fugson_tenants_v4';
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function loadStoredTenants(): PaymentRecord[] {
+  if (typeof window === 'undefined') return INITIAL_TENANT_PAYMENTS;
+  try {
+    // Purge legacy storage keys that held demo data
+    localStorage.removeItem('fugson_tenants_v3');
+    localStorage.removeItem('fugson_tenants_v2');
+    localStorage.removeItem('propertypro_tenants');
+    localStorage.removeItem('propertypro_tenants_v2');
+
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (err) {
+    console.error('Failed to parse tenants from localStorage', err);
+  }
+  return INITIAL_TENANT_PAYMENTS;
+}
+
+function saveStoredTenants(tenants: PaymentRecord[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(tenants));
+  } catch (err) {
+    console.error('Failed to save tenants to localStorage', err);
+  }
+}
+
+let inMemoryTenants: PaymentRecord[] = loadStoredTenants();
 
 export const tenantService = {
   async getTenants(): Promise<PaymentRecord[]> {
-    const res = await fetch(`${API_URL}/tenants`);
-    if (!res.ok) throw new Error('Failed to fetch tenants');
-    return res.json();
+    await delay(100);
+    inMemoryTenants = loadStoredTenants();
+    return inMemoryTenants;
   },
 
   async getTenantsByAgent(agentId: string): Promise<PaymentRecord[]> {
-    const res = await fetch(`${API_URL}/tenants/by-agent/${agentId}`);
-    if (!res.ok) throw new Error('Failed to fetch tenants for agent');
-    return res.json();
+    await delay(100);
+    inMemoryTenants = loadStoredTenants();
+    return inMemoryTenants.filter((t) => t.agentId === agentId);
   },
 
   async getTenantById(id: string): Promise<PaymentRecord | undefined> {
-    const res = await fetch(`${API_URL}/tenants/${id}`);
-    if (res.status === 404) return undefined;
-    if (!res.ok) throw new Error('Failed to fetch tenant');
-    return res.json();
+    await delay(100);
+    inMemoryTenants = loadStoredTenants();
+    return inMemoryTenants.find((t) => t.id === id);
   },
 
-  async addTenant(data: {
-    property_id: string;
-    name: string;
-    email: string;
-    phone: string;
-    rent_amount: number;
-    rent_cycle?: string;
-    multi_year_eligible?: boolean;
-  }): Promise<void> {
-    const res = await fetch(`${API_URL}/tenants`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Failed to create tenant');
+  async addTenant(newTenant: PaymentRecord): Promise<PaymentRecord> {
+    await delay(100);
+    inMemoryTenants = [newTenant, ...inMemoryTenants];
+    saveStoredTenants(inMemoryTenants);
+    return newTenant;
+  },
+
+  async updateTenant(tenantId: string, updates: Partial<PaymentRecord>): Promise<PaymentRecord | undefined> {
+    await delay(100);
+    inMemoryTenants = inMemoryTenants.map((t) => (t.id === tenantId ? { ...t, ...updates } : t));
+    saveStoredTenants(inMemoryTenants);
+    return inMemoryTenants.find((t) => t.id === tenantId);
+  },
+
+  async deleteTenant(tenantId: string): Promise<boolean> {
+    await delay(100);
+    inMemoryTenants = inMemoryTenants.filter((t) => t.id !== tenantId);
+    saveStoredTenants(inMemoryTenants);
+    return true;
   },
 
   async addMisconduct(tenantId: string, misconduct: MisconductRecord): Promise<boolean> {
-    const res = await fetch(`${API_URL}/tenants/${tenantId}/misconduct`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(misconduct),
+    await delay(100);
+    inMemoryTenants = inMemoryTenants.map((t) => {
+      if (t.id === tenantId) {
+        return {
+          ...t,
+          misconductStrikes: [misconduct, ...(t.misconductStrikes || [])],
+        };
+      }
+      return t;
     });
-    return res.ok;
+    saveStoredTenants(inMemoryTenants);
+    return true;
   },
 
-  async remitCommission(tenantId: string, reference?: string): Promise<boolean> {
-    const res = await fetch(`${API_URL}/tenants/${tenantId}/remit-commission`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reference }),
-    });
-    return res.ok;
+  async remitCommission(tenantId: string): Promise<boolean> {
+    await delay(100);
+    inMemoryTenants = inMemoryTenants.map((t) =>
+      t.id === tenantId ? { ...t, agentCommissionRemitted: true } : t
+    );
+    saveStoredTenants(inMemoryTenants);
+    return true;
   },
 
   async toggleMultiYear(tenantId: string, isEligible: boolean): Promise<boolean> {
-    const res = await fetch(`${API_URL}/tenants/${tenantId}/multi-year`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isEligible }),
-    });
-    return res.ok;
+    await delay(100);
+    inMemoryTenants = inMemoryTenants.map((t) =>
+      t.id === tenantId ? { ...t, multiYearEligible: isEligible } : t
+    );
+    saveStoredTenants(inMemoryTenants);
+    return true;
+  },
+
+  async toggleAutoEmailReceipt(tenantId: string, enabled: boolean): Promise<boolean> {
+    await delay(100);
+    inMemoryTenants = inMemoryTenants.map((t) =>
+      t.id === tenantId ? { ...t, autoEmailReceipt: enabled } : t
+    );
+    saveStoredTenants(inMemoryTenants);
+    return true;
   },
 };

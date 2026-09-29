@@ -1,13 +1,14 @@
 import { PaymentRecord, MisconductRecord } from '../types';
 import { INITIAL_TENANT_PAYMENTS } from '../data/mockData';
 
-const STORAGE_KEY = 'fugson_tenants_v3';
+const STORAGE_KEY = 'fugson_tenants_v4';
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function loadStoredTenants(): PaymentRecord[] {
   if (typeof window === 'undefined') return INITIAL_TENANT_PAYMENTS;
   try {
     // Purge legacy storage keys that held demo data
+    localStorage.removeItem('fugson_tenants_v3');
     localStorage.removeItem('fugson_tenants_v2');
     localStorage.removeItem('propertypro_tenants');
     localStorage.removeItem('propertypro_tenants_v2');

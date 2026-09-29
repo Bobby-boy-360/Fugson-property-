@@ -6,7 +6,7 @@ import { propertyService } from './propertyService';
 // Simulated network delay
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const USERS_STORAGE_KEY = 'fugson_registered_users_v3';
+const USERS_STORAGE_KEY = 'fugson_registered_users_v4';
 
 interface StoredAccount {
   email: string;
@@ -19,6 +19,8 @@ interface StoredAccount {
 function getRegisteredAccounts(): StoredAccount[] {
   if (typeof window === 'undefined') return [];
   try {
+    localStorage.removeItem('fugson_registered_users_v3');
+    localStorage.removeItem('fugson_registered_users_v2');
     const raw = localStorage.getItem(USERS_STORAGE_KEY);
     if (raw) return JSON.parse(raw);
   } catch (e) {

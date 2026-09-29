@@ -74,6 +74,27 @@ export default function App() {
           return;
         }
       }
+
+      // Route Protection: Tenants must never view other tenants' pages
+      if (role === 'TENANT' && user?.tenantId) {
+        if (path.startsWith('/pay/')) {
+          const targetToken = path.replace('/pay/', '').split('/')[0].split('?')[0];
+          const isOwnToken =
+            targetToken === user.tenantId ||
+            targetToken.includes(user.tenantId.replace('pay-', '').replace('fg-tenant-', ''));
+          if (!isOwnToken) {
+            setMiddlewareAlert(
+              `[Privacy Security] Tenants are restricted to their own account. Access to other tenants' pages is prohibited.`
+            );
+            const myPath = `/pay/${user.tenantId}`;
+            if (typeof window !== 'undefined' && window.location.pathname !== myPath) {
+              window.history.pushState({}, '', myPath);
+            }
+            setCurrentPath(myPath);
+            return;
+          }
+        }
+      }
     }
 
     // Handle subpath section setting if navigating to /admin/properties, etc.
@@ -176,12 +197,20 @@ export default function App() {
           </AgentLayout>
         )}
 
-        {(currentPath.startsWith('/pay') || currentPath.startsWith('/tenant')) && (
-          <TenantPublicPortal
-            params={{ token: 'fg-tenant-98231' }}
-            onNavigate={navigateTo}
-          />
-        )}
+        {(currentPath.startsWith('/pay') || currentPath.startsWith('/tenant')) && (() => {
+          let targetToken: string | undefined = undefined;
+          if (currentPath.startsWith('/pay/')) {
+            targetToken = currentPath.replace('/pay/', '').split('/')[0].split('?')[0];
+          } else if (currentUser?.role === 'TENANT') {
+            targetToken = currentUser.tenantId;
+          }
+          return (
+            <TenantPublicPortal
+              params={{ token: targetToken }}
+              onNavigate={navigateTo}
+            />
+          );
+        })()}
       </main>
     </div>
   );

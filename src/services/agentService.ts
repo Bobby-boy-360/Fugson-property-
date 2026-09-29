@@ -1,13 +1,14 @@
 import { AgentItem } from '../types';
 import { MOCK_AGENTS } from '../data/mockData';
 
-const STORAGE_KEY = 'fugson_agents_v3';
+const STORAGE_KEY = 'fugson_agents_v4';
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function loadStoredAgents(): AgentItem[] {
   if (typeof window === 'undefined') return MOCK_AGENTS;
   try {
     // Purge legacy storage keys that held demo data
+    localStorage.removeItem('fugson_agents_v3');
     localStorage.removeItem('fugson_agents_v2');
     localStorage.removeItem('propertypro_agents');
     localStorage.removeItem('propertypro_agents_v2');

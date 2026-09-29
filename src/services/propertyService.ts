@@ -1,13 +1,14 @@
 import { PropertyItem } from '../types';
 import { MOCK_PROPERTIES } from '../data/mockData';
 
-const STORAGE_KEY = 'fugson_properties_v3';
+const STORAGE_KEY = 'fugson_properties_v4';
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function loadStoredProperties(): PropertyItem[] {
   if (typeof window === 'undefined') return MOCK_PROPERTIES;
   try {
     // Purge legacy storage keys that held demo data
+    localStorage.removeItem('fugson_properties_v3');
     localStorage.removeItem('fugson_properties_v2');
     localStorage.removeItem('propertypro_properties');
     localStorage.removeItem('propertypro_properties_v2');

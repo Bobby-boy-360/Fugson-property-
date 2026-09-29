@@ -103,6 +103,16 @@ export default function AdminTenantsView({
     const isPaid = newTenantStatus === 'Paid';
     const numAmount = Number(newTenantAmount);
 
+    const parsedYears = Math.min(
+      4,
+      Math.max(
+        1,
+        newTenantLeasePeriod.match(/(\d+)\s*(?:year|yr)/i)
+          ? parseInt(newTenantLeasePeriod.match(/(\d+)\s*(?:year|yr)/i)![1], 10)
+          : 1
+      )
+    );
+
     const newRecord: PaymentRecord = {
       id,
       tenantName: newTenantName.trim(),
@@ -123,6 +133,7 @@ export default function AdminTenantsView({
       amountOwed: isPaid ? 0 : numAmount,
       amountPaid: isPaid ? numAmount : 0,
       leasePeriod: newTenantLeasePeriod,
+      leaseYears: parsedYears,
       phone: newTenantPhone.trim() || '+234 800 000 0000',
       nextOfKinName: newTenantKinName.trim(),
       nextOfKinRelationship: newTenantKinRelationship.trim(),
@@ -620,14 +631,35 @@ export default function AdminTenantsView({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Lease Period</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700">Lease Period</label>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4].map((y) => (
+                        <button
+                          key={y}
+                          type="button"
+                          onClick={() => {
+                            const curYear = new Date().getFullYear();
+                            setNewTenantLeasePeriod(
+                              y === 1
+                                ? `1 Year Lease (${curYear})`
+                                : `${y} Years Lease (${curYear} – ${curYear + y})`
+                            );
+                          }}
+                          className="px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 hover:bg-teal-50 hover:text-[#12897F] text-slate-600 rounded border border-slate-200 transition cursor-pointer"
+                        >
+                          {y}Y
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <input
                     type="text"
                     required
                     value={newTenantLeasePeriod}
                     onChange={(e) => setNewTenantLeasePeriod(e.target.value)}
-                    placeholder="01 Jan 2025 – 31 Dec 2025"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-[#12897F]"
+                    placeholder="e.g. 2 Years Lease (2025 – 2027)"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-[#12897F] text-xs"
                   />
                 </div>
 

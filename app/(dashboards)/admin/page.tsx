@@ -63,6 +63,24 @@ export default function AdminDashboardPage({
   // Feedback Notification Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Admin exclusive rights: Edit Rent & Lease Duration
+  const [editingRentAmount, setEditingRentAmount] = useState<number>(0);
+  const [editingLeaseDuration, setEditingLeaseDuration] = useState<string>('');
+  const [editingLeaseYears, setEditingLeaseYears] = useState<number>(1);
+
+  React.useEffect(() => {
+    if (selectedTenant) {
+      setEditingRentAmount(selectedTenant.amount || 2500000);
+      setEditingLeaseDuration(selectedTenant.leasePeriod || '1 Year Lease');
+      const yrs =
+        selectedTenant.leaseYears ||
+        (selectedTenant.leasePeriod?.match(/(\d+)\s*(?:year|yr)/i)
+          ? parseInt(selectedTenant.leasePeriod.match(/(\d+)\s*(?:year|yr)/i)![1], 10)
+          : 1);
+      setEditingLeaseYears(yrs);
+    }
+  }, [selectedTenant?.id]);
+
   React.useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
@@ -106,23 +124,52 @@ export default function AdminDashboardPage({
   });
 
   // Drawer Action: Toggle Multi-Year Advance Payment
-  const handleToggleMultiYear = (tenantId: string) => {
-    setPayments((prev) =>
-      prev.map((item) => {
-        if (item.id === tenantId) {
-          const nextVal = !item.multiYearEligible;
-          showToast(
-            nextVal
-              ? `Multi-year advance payment enabled for ${item.tenantName}.`
-              : `Multi-year advance payment disabled for ${item.tenantName}.`
-          );
-          const updated = { ...item, multiYearEligible: nextVal };
-          if (selectedTenant?.id === tenantId) setSelectedTenant(updated);
-          return updated;
-        }
-        return item;
-      })
+  const handleToggleMultiYear = async (tenantId: string) => {
+    const item = payments.find((p) => p.id === tenantId);
+    if (!item) return;
+    const nextVal = !item.multiYearEligible;
+    const defaultYears = item.leaseYears && item.leaseYears >= 2 ? item.leaseYears : 2;
+    const updated: PaymentRecord = {
+      ...item,
+      multiYearEligible: nextVal,
+      leaseYears: nextVal ? defaultYears : (item.leaseYears || 1),
+    };
+    await tenantService.updateTenant(tenantId, updated);
+    setPayments((prev) => prev.map((p) => (p.id === tenantId ? updated : p)));
+    if (selectedTenant?.id === tenantId) {
+      setSelectedTenant(updated);
+      if (nextVal) {
+        setEditingLeaseYears(defaultYears);
+      }
+    }
+    showToast(
+      nextVal
+        ? `Multi-year advance payment enabled for ${item.tenantName} (${defaultYears} Years max approved).`
+        : `Multi-year advance payment disabled for ${item.tenantName}.`
     );
+  };
+
+  // Drawer Action: Configure exact allowed advance years for Multi-Year
+  const handleSetMultiYearYears = async (tenantId: string, years: number) => {
+    const item = payments.find((p) => p.id === tenantId);
+    if (!item) return;
+    const clampedYears = Math.min(4, Math.max(2, years));
+    const currentYear = new Date().getFullYear();
+    const updatedPeriod = `${clampedYears} Years Advance Tenancy (${currentYear} – ${currentYear + clampedYears})`;
+    const updated: PaymentRecord = {
+      ...item,
+      multiYearEligible: true,
+      leaseYears: clampedYears,
+      leasePeriod: updatedPeriod,
+    };
+    await tenantService.updateTenant(tenantId, updated);
+    setPayments((prev) => prev.map((p) => (p.id === tenantId ? updated : p)));
+    if (selectedTenant?.id === tenantId) {
+      setSelectedTenant(updated);
+      setEditingLeaseYears(clampedYears);
+      setEditingLeaseDuration(updatedPeriod);
+    }
+    showToast(`Approved advance lease duration set to ${clampedYears} Years for ${item.tenantName}. Tenant cannot pay more than ${clampedYears} yrs.`);
   };
 
   // Drawer Action: Toggle Auto-Email Receipt Preference
@@ -179,6 +226,36 @@ export default function AdminDashboardPage({
         return item;
       })
     );
+  };
+
+  // Drawer Action: Admin Right to Save Rent Amount & Lease Duration
+  const handleSaveRentAndLease = async () => {
+    if (!selectedTenant) return;
+    const numAmount = Number(editingRentAmount) || selectedTenant.amount;
+    const isPaid = selectedTenant.status === 'Paid';
+    const parsedYears = Math.min(
+      4,
+      Math.max(
+        1,
+        editingLeaseYears ||
+          (editingLeaseDuration.match(/(\d+)\s*(?:year|yr)/i)
+            ? parseInt(editingLeaseDuration.match(/(\d+)\s*(?:year|yr)/i)![1], 10)
+            : 1)
+      )
+    );
+    const updated: PaymentRecord = {
+      ...selectedTenant,
+      amount: numAmount,
+      amountOwed: isPaid ? 0 : numAmount,
+      leasePeriod: editingLeaseDuration.trim() || selectedTenant.leasePeriod,
+      leaseYears: parsedYears,
+      agentCommissionAmount: Math.round(numAmount * 0.05),
+    };
+
+    await tenantService.updateTenant(selectedTenant.id, updated);
+    setPayments((prev) => prev.map((t) => (t.id === selectedTenant.id ? updated : t)));
+    setSelectedTenant(updated);
+    showToast(`Rent figure (₦${numAmount.toLocaleString()}) and ${parsedYears}-year lease period updated for ${selectedTenant.tenantName}.`);
   };
 
   // Drawer Action: Log Misconduct Record
@@ -887,6 +964,102 @@ export default function AdminDashboardPage({
                   )}
                 </div>
 
+                {/* 2. Admin Exclusive Right: Set Rent Figure & Lease Duration */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3.5 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-[#12897F]" />
+                      <span>Admin Control: Rent & Lease Duration</span>
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-teal-50 text-[#12897F] border border-teal-200">
+                      Admin Right
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Tenants are restricted from setting rent figures. Authorized administrators hold exclusive rights to configure annual rents and lease tenures:
+                  </p>
+
+                  <div className="space-y-2.5">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        Annual Rent Figure (₦)
+                      </label>
+                      <div className="relative">
+                        <span className="w-4 h-4 text-slate-400 font-bold text-xs absolute left-3 top-2.5 select-none">₦</span>
+                        <input
+                          type="number"
+                          step="50000"
+                          value={editingRentAmount}
+                          onChange={(e) => setEditingRentAmount(Number(e.target.value))}
+                          className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#12897F]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11px] font-semibold text-slate-700">
+                          Lease Duration / Period
+                        </label>
+                        <span className="text-[10px] text-[#12897F] font-bold">
+                          {editingLeaseYears} Year{editingLeaseYears > 1 ? 's' : ''} Tenancy
+                        </span>
+                      </div>
+
+                      {/* Quick tenure presets (1, 2, 3, 4 Years) */}
+                      <div className="grid grid-cols-4 gap-1.5 mb-2">
+                        {[1, 2, 3, 4].map((yrs) => {
+                          const isSelected = editingLeaseYears === yrs;
+                          const currentYear = new Date().getFullYear();
+                          return (
+                            <button
+                              key={yrs}
+                              type="button"
+                              onClick={() => {
+                                setEditingLeaseYears(yrs);
+                                setEditingLeaseDuration(
+                                  yrs === 1
+                                    ? `1 Year Lease (${currentYear})`
+                                    : `${yrs} Years Lease (${currentYear} – ${currentYear + yrs})`
+                                );
+                              }}
+                              className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition text-center cursor-pointer ${
+                                isSelected
+                                  ? 'bg-[#12897F] text-white border-[#12897F] shadow-2xs'
+                                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {yrs} Yr{yrs > 1 ? 's' : ''}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <input
+                        type="text"
+                        value={editingLeaseDuration}
+                        onChange={(e) => {
+                          setEditingLeaseDuration(e.target.value);
+                          const m = e.target.value.match(/(\d+)\s*(?:year|yr)/i);
+                          if (m) setEditingLeaseYears(parseInt(m[1], 10));
+                        }}
+                        placeholder="e.g. 2 Years Lease (2025 – 2027)"
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-2 focus:ring-[#12897F]"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleSaveRentAndLease}
+                      className="w-full py-2 px-3 rounded-lg bg-[#12897F] hover:bg-[#0f766e] text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Save Rent & Lease Duration</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Direct "View Tenant POV" Button */}
                 <button
                   type="button"
@@ -1030,12 +1203,14 @@ export default function AdminDashboardPage({
                 </div>
 
                 {/* 2. Multi-Year Advance Payment Toggle */}
-                <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2">
+                <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="font-bold text-slate-900 block">Multi-Year Advance Payment</span>
+                      <span className="font-bold text-slate-900 block text-xs">
+                        Multi-Year Advance Payment
+                      </span>
                       <span className="text-[11px] text-slate-500">
-                        Permits tenant to settle multi-year lease periods via portal.
+                        Permits tenant to settle advance multi-year lease periods via portal.
                       </span>
                     </div>
 
@@ -1053,6 +1228,47 @@ export default function AdminDashboardPage({
                       />
                     </button>
                   </div>
+
+                  {selectedTenant.multiYearEligible && (
+                    <div className="pt-2 border-t border-slate-100 space-y-2">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-slate-700">Admin-Saved Approved Lease Period:</span>
+                        <span className="font-bold text-[#12897F] bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                          {selectedTenant.leaseYears && selectedTenant.leaseYears >= 2 ? selectedTenant.leaseYears : 2} Years Max
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        {[2, 3, 4].map((yrs) => {
+                          const currentApproved =
+                            selectedTenant.leaseYears && selectedTenant.leaseYears >= 2
+                              ? selectedTenant.leaseYears
+                              : 2;
+                          const isSelected = currentApproved === yrs;
+                          return (
+                            <button
+                              key={yrs}
+                              type="button"
+                              onClick={() => handleSetMultiYearYears(selectedTenant.id, yrs)}
+                              className={`py-2 px-2.5 rounded-lg text-xs font-bold border transition text-center cursor-pointer ${
+                                isSelected
+                                  ? 'bg-[#12897F] text-white border-[#12897F] shadow-2xs'
+                                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {yrs} Years
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <p className="text-[10px] text-slate-500 leading-relaxed">
+                        • Only up to <strong>{selectedTenant.leaseYears && selectedTenant.leaseYears >= 2 ? selectedTenant.leaseYears : 2} years</strong> will be displayed on the tenant's portal.
+                        <br />
+                        • The tenant will not be permitted to select or pay for more than {selectedTenant.leaseYears && selectedTenant.leaseYears >= 2 ? selectedTenant.leaseYears : 2} years.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* 3. Misconduct Strikes & Violations */}

@@ -13,7 +13,6 @@ import {
   PieChart,
   Layers,
   Calendar,
-  DollarSign,
   Building,
   Filter,
   Printer,

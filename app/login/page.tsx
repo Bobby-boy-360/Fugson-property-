@@ -48,8 +48,6 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
   const [signupProperty, setSignupProperty] = useState('');
   const [signupCustomProperty, setSignupCustomProperty] = useState('');
   const [signupUnit, setSignupUnit] = useState('');
-  const [signupRent, setSignupRent] = useState<number>(2000000);
-  const [signupLeasePeriod, setSignupLeasePeriod] = useState('01 Jan 2025 – 31 Dec 2025');
   const [signupNextOfKinName, setSignupNextOfKinName] = useState('');
   const [signupNextOfKinRelationship, setSignupNextOfKinRelationship] = useState('Spouse');
   const [signupNextOfKinPhone, setSignupNextOfKinPhone] = useState('');
@@ -143,9 +141,9 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
         phone: signupPhone.trim(),
         password: signupPassword,
         property: selectedProp,
-        unit: signupUnit.trim() || 'Apartment 1A',
-        rentAmount: Number(signupRent) || 2000000,
-        leasePeriod: signupLeasePeriod,
+        unit: signupUnit.trim() || 'Suite 1A',
+        rentAmount: 2500000,
+        leasePeriod: '1 Year Lease (Admin Set)',
         nextOfKinName: signupNextOfKinName.trim(),
         nextOfKinRelationship: signupNextOfKinRelationship.trim(),
         nextOfKinPhone: signupNextOfKinPhone.trim(),
@@ -438,54 +436,19 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
               )}
             </div>
 
-            {/* Unit / Flat Number & Annual Rent Amount */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Unit / Flat / Office # <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={signupUnit}
-                  onChange={(e) => setSignupUnit(e.target.value)}
-                  placeholder="e.g. Flat 3B or Suite 12"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 outline-none focus:ring-2 focus:ring-[#12897F]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Annual Rent (₦) <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <span className="w-4 h-4 text-slate-500 font-bold text-xs absolute left-3 top-2.5 select-none">₦</span>
-                  <input
-                    type="number"
-                    min="100000"
-                    step="50000"
-                    required
-                    value={signupRent}
-                    onChange={(e) => setSignupRent(Number(e.target.value))}
-                    className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-[#12897F]"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Lease Period */}
+            {/* Unit / Flat Number */}
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Lease Period</label>
-              <div className="relative">
-                <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
-                <input
-                  type="text"
-                  value={signupLeasePeriod}
-                  onChange={(e) => setSignupLeasePeriod(e.target.value)}
-                  placeholder="01 Jan 2025 – 31 Dec 2025"
-                  className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-[#12897F]"
-                />
-              </div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                Unit / Flat / Office # <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={signupUnit}
+                onChange={(e) => setSignupUnit(e.target.value)}
+                placeholder="e.g. Flat 3B or Suite 12"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-[#12897F] text-xs"
+              />
             </div>
 
             {/* Next of Kin & Emergency Contact (Separated & Well-Organized) */}

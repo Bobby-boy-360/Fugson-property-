@@ -61,7 +61,7 @@ export default function AdminPropertiesView({ onFilterTenantsByProperty }: Admin
     { label: 'All Estates', value: 'ALL' },
     { label: 'Residential', value: 'Residential' },
     { label: 'Commercial', value: 'Commercial' },
-    { label: 'Farmlands (Coming Soon)', value: 'Farmland' },
+    { label: 'Mixed-Use Development', value: 'Mixed-Use Development' },
     { label: 'Shortlet Villas (Coming Soon)', value: 'Shortlet Villa' },
   ];
 
@@ -83,7 +83,7 @@ export default function AdminPropertiesView({ onFilterTenantsByProperty }: Admin
     e.preventDefault();
     if (!newName.trim() || !newLocation.trim()) return;
 
-    const isComingSoonType = newType === 'Farmland' || newType === 'Shortlet Villa';
+    const isComingSoonType = newType === 'Shortlet Villa';
 
     const newProp: PropertyItem = {
       id: `prop-${Date.now().toString().slice(-6)}`,
@@ -252,8 +252,8 @@ export default function AdminPropertiesView({ onFilterTenantsByProperty }: Admin
                           ? 'bg-blue-50 text-blue-700 border-blue-200'
                           : property.type === 'Commercial'
                           ? 'bg-purple-50 text-purple-700 border-purple-200'
-                          : property.type === 'Farmland'
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : property.type === 'Mixed-Use Development'
+                          ? 'bg-amber-50 text-amber-800 border-amber-200'
                           : 'bg-rose-50 text-rose-700 border-rose-200'
                       }`}
                     >
@@ -423,7 +423,7 @@ export default function AdminPropertiesView({ onFilterTenantsByProperty }: Admin
                 >
                   <option value="Residential">Residential High-Rise / Villa</option>
                   <option value="Commercial">Commercial Office Complex</option>
-                  <option value="Farmland">Farmland (Coming Soon)</option>
+                  <option value="Mixed-Use Development">Mixed-Use Commercial & Residential</option>
                   <option value="Shortlet Villa">Shortlet Villa (Coming Soon)</option>
                 </select>
               </div>

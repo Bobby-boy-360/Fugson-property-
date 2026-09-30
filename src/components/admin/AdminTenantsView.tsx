@@ -22,7 +22,7 @@ import {
   Mail,
 } from 'lucide-react';
 import { PaymentRecord } from '@/src/types';
-import { formatNaira } from '@/src/utils/auth';
+import { formatNaira } from '@/src/auth';
 
 interface AdminTenantsViewProps {
   tenants: PaymentRecord[];

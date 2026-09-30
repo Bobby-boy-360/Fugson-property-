@@ -1,5 +1,5 @@
 import { AuthUser, UserRole, TenantSignupPayload, PaymentRecord } from '../types';
-import { getCurrentUser, loginAs, logout } from '../utils/auth';
+import { getCurrentUser, loginAs, logout } from '../auth';
 import { tenantService } from './tenantService';
 import { propertyService } from './propertyService';
 

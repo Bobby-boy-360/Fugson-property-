@@ -19,7 +19,7 @@ import {
   Database,
   RefreshCw,
 } from 'lucide-react';
-import { formatNaira } from '@/src/utils/auth';
+import { formatNaira } from '@/src/auth';
 import { propertyService } from '@/src/services/propertyService';
 import { reportService, FinancialAuditSummary } from '@/src/services/reportService';
 import { PropertyItem } from '@/src/types';

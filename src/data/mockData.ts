@@ -1,4 +1,10 @@
-import { PaymentRecord, PropertyItem, MaintenanceComplaint, AgentItem, ShortletItem } from '../types';
+import {
+  PaymentRecord,
+  PropertyItem,
+  MaintenanceComplaint,
+  AgentItem,
+  ShortletItem,
+} from '../types';
 
 export const INITIAL_TENANT_PAYMENTS: PaymentRecord[] = [
   {
@@ -8,7 +14,7 @@ export const INITIAL_TENANT_PAYMENTS: PaymentRecord[] = [
     property: 'PropertyPro Court Estate',
     unit: 'Unit 4B (Residential Villa)',
     amount: 3500000,
-    status: 'Paid',
+    status: 'Overdue',
     date: '2025-02-18',
     dueDate: '2025-02-01',
     receiptNumber: 'REC-FUG-2025-084',
@@ -17,8 +23,8 @@ export const INITIAL_TENANT_PAYMENTS: PaymentRecord[] = [
     agentCommissionAmount: 175000,
     agentCommissionRemitted: false,
     multiYearEligible: false,
-    amountOwed: 0,
-    amountPaid: 3500000,
+    amountOwed: 3500000,
+    amountPaid: 0,
     leasePeriod: '01 Mar 2025 – 28 Feb 2026',
     phone: '+234 803 555 0192',
     misconductStrikes: [
@@ -27,11 +33,11 @@ export const INITIAL_TENANT_PAYMENTS: PaymentRecord[] = [
         tenantId: 'pay-001',
         date: '2026-08-15',
         offenseTitle: 'Property Damage',
-        
-        description: 'Unauthorized perimeter excavation and broken water supply line on Unit 4B.',
+        description:
+          'Unauthorized perimeter excavation and broken water supply line on Unit 4B.',
         penaltyAmount: 50000,
-        proofImageUrl: 'https://images.unsplash.com/photo-1590518742468-bdf3ba465d66?w=200&q=80',
-         
+        proofImageUrl:
+          'https://images.unsplash.com/photo-1590518742468-bdf3ba465d66?w=200&q=80',
       },
     ],
   },
@@ -105,11 +111,11 @@ export const INITIAL_TENANT_PAYMENTS: PaymentRecord[] = [
         tenantId: 'pay-004',
         date: '2026-08-20',
         offenseTitle: 'Waste Disposal',
-        
-        description: 'Improper disposal of refuse near drainage culvert.',
+        description:
+          'Improper disposal of refuse near drainage culvert.',
         penaltyAmount: 15000,
-        proofImageUrl: 'https://images.unsplash.com/photo-1590518742468-bdf3ba465d66?w=200&q=80',
-        
+        proofImageUrl:
+          'https://images.unsplash.com/photo-1590518742468-bdf3ba465d66?w=200&q=80',
       },
     ],
   },
@@ -262,7 +268,8 @@ export const MOCK_COMPLAINTS: MaintenanceComplaint[] = [
     tenantName: 'Alabi Adebayo',
     property: 'PropertyPro Court Estate (Unit 4B)',
     category: 'Plumbing',
-    description: 'Borehole pressure valve drops intermittently during high morning pumping hours.',
+    description:
+      'Borehole pressure valve drops intermittently during high morning pumping hours.',
     priority: 'High',
     submittedAt: '2025-02-22 09:30',
     status: 'Technician Assigned',
@@ -298,7 +305,8 @@ export const MOCK_AGENTS: AgentItem[] = [
     name: 'Emeka Nwosu',
     email: 'emeka@fugsonproperty.com',
     phone: '+234 803 111 2233',
-    specialty: 'Residential & Commercial Corridors (Farmlands: Coming Soon)',
+    specialty:
+      'Residential & Commercial Corridors (Farmlands: Coming Soon)',
     assignedPropertiesCount: 3,
     managedTenantsCount: 4,
     totalLeaseVolume: 6410000,
@@ -311,7 +319,8 @@ export const MOCK_AGENTS: AgentItem[] = [
     name: 'Zainab Bello',
     email: 'zainab@fugsonproperty.com',
     phone: '+234 814 222 3344',
-    specialty: 'Residential Estates & Penthouses (Shortlets: Coming Soon)',
+    specialty:
+      'Residential Estates & Penthouses (Shortlets: Coming Soon)',
     assignedPropertiesCount: 2,
     managedTenantsCount: 2,
     totalLeaseVolume: 2300000,
@@ -345,7 +354,12 @@ export const MOCK_SHORTLETS: ShortletItem[] = [
     checkIn: '2025-02-15',
     checkOut: '2025-02-28',
     rating: 4.9,
-    amenities: ['24/7 Solar Inverter', 'Waterfront Deck', 'High-Speed Starlink', 'Dedicated Parking'],
+    amenities: [
+      '24/7 Solar Inverter',
+      'Waterfront Deck',
+      'High-Speed Starlink',
+      'Dedicated Parking',
+    ],
   },
   {
     id: 'sht-02',
@@ -354,7 +368,12 @@ export const MOCK_SHORTLETS: ShortletItem[] = [
     nightlyRate: 110000,
     status: 'Available',
     rating: 4.8,
-    amenities: ['Infinity Pool', 'Chef Kitchen', 'EV Charging', 'Smart Lock'],
+    amenities: [
+      'Infinity Pool',
+      'Chef Kitchen',
+      'EV Charging',
+      'Smart Lock',
+    ],
   },
   {
     id: 'sht-03',
@@ -366,7 +385,12 @@ export const MOCK_SHORTLETS: ShortletItem[] = [
     checkIn: '2025-02-20',
     checkOut: '2025-02-24',
     rating: 5.0,
-    amenities: ['Private Waterfront View', 'Bio-Gas Firepit', 'Concierge Service', 'Private Terrace'],
+    amenities: [
+      'Private Waterfront View',
+      'Bio-Gas Firepit',
+      'Concierge Service',
+      'Private Terrace',
+    ],
   },
 ];
 
@@ -520,7 +544,8 @@ export const MOCK_PROFIT_LOSS = {
     totalOverheads: 3440000,
     netProfit: 5060000,
     netMargin: 59.5,
-    notes: 'Includes active residential collections, commercial tenancies, and farm plot prep fees.',
+    notes:
+      'Includes active residential collections, commercial tenancies, and farm plot prep fees.',
   },
   farm: {
     id: 'farm',
@@ -528,15 +553,16 @@ export const MOCK_PROFIT_LOSS = {
     type: 'Agricultural Farm P&L',
     grossRevenue: 2400000,
     overheads: {
-      maintenance: 380000, // Tractors, drip irrigation line upkeep, boreholes
-      power: 420000, // Irrigation pump station diesel + solar battery upkeep
-      internet: 85000, // Farm manager IoT Starlink link
-      cleaningSecurity: 315000, // Perimeter agro-patrol guards & silage clearing
+      maintenance: 380000,
+      power: 420000,
+      internet: 85000,
+      cleaningSecurity: 315000,
     },
     totalOverheads: 1200000,
     netProfit: 1200000,
     netMargin: 50.0,
-    notes: 'Agro-tenancy plot rentals minus pump generator diesel, boundary security, and irrigation repairs.',
+    notes:
+      'Agro-tenancy plot rentals minus pump generator diesel, boundary security, and irrigation repairs.',
   },
   residential: {
     id: 'residential',
@@ -544,15 +570,16 @@ export const MOCK_PROFIT_LOSS = {
     type: 'Residential High-Rise P&L',
     grossRevenue: 3800000,
     overheads: {
-      maintenance: 260000, // Elevators & water booster pump servicing
-      power: 680000, // Dual 250kVA standby diesel generators & PHCN band A tariff
-      internet: 140000, // Metro fiber distribution for smart building access
-      cleaningSecurity: 380000, // 24/7 armed gate officers & common area cleaners
+      maintenance: 260000,
+      power: 680000,
+      internet: 140000,
+      cleaningSecurity: 380000,
     },
     totalOverheads: 1460000,
     netProfit: 2340000,
     netMargin: 61.6,
-    notes: 'Residential flat service charge collections and advance rent amortizations.',
+    notes:
+      'Residential flat service charge collections and advance rent amortizations.',
   },
   commercial: {
     id: 'commercial',
@@ -560,10 +587,10 @@ export const MOCK_PROFIT_LOSS = {
     type: 'Commercial Office P&L',
     grossRevenue: 2300000,
     overheads: {
-      maintenance: 140000, // Central HVAC air filters & parking gate motors
-      power: 350000, // Business-hour generator schedule
-      internet: 95000, // Dedicated fiber trunk for corporate tenants
-      cleaningSecurity: 195000, // Daytime sanitation crew & night security team
+      maintenance: 140000,
+      power: 350000,
+      internet: 95000,
+      cleaningSecurity: 195000,
     },
     totalOverheads: 780000,
     netProfit: 1520000,

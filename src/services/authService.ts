@@ -52,20 +52,34 @@ export const authService = {
 
     let role: UserRole = registered ? registered.role : 'TENANT';
     let name = registered ? registered.name : 'Registered Tenant';
-    let tenantId = registered?.tenantId || `fg-tenant-001`;
-
-    if (!registered) {
-      if (cleanEmail.includes('admin')) {
-        role = 'ADMIN';
-        name = 'Property Administrator';
-      } else if (cleanEmail.includes('agent') || cleanEmail.includes('briggs') || cleanEmail.includes('nwosu')) {
-        role = 'AGENT';
-        name = 'Field Agent';
-      } else {
-        role = 'TENANT';
-        name = 'Registered Tenant';
-      }
-    }
+let tenantId = registered?.tenantId || (
+  cleanEmail === 'michael@propertypro.com'
+    ? 'pay-001'
+    : 'fg-tenant-001'
+);
+  if (!registered) {
+  if (
+    cleanEmail === 'peter@propertypro.com' ||
+    cleanEmail.includes('admin')
+  ) {
+    role = 'ADMIN';
+    name = 'Property Administrator';
+  } else if (
+    cleanEmail === 'briggs@propertypro.com' ||
+    cleanEmail.includes('agent') ||
+    cleanEmail.includes('briggs') ||
+    cleanEmail.includes('nwosu')
+  ) {
+    role = 'AGENT';
+    name = 'Field Agent';
+  } else if (cleanEmail === 'michael@propertypro.com') {
+    role = 'TENANT';
+    name = 'Michael';
+  } else {
+    role = 'TENANT';
+    name = 'Registered Tenant';
+  }
+}
 
     return loginAs(role, email, tenantId, name);
   },

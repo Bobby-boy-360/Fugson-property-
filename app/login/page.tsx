@@ -26,8 +26,12 @@ export default function LoginPage({ onNavigate }: LoginPageProps) {
     try {
       const user = await authService.login(email, password);
       // Route based on role
-      const destination = user.role === 'ADMIN' ? '/admin' : user.role === 'AGENT' ? '/agent' : '/pay/fg-tenant-001';
-      if (onNavigate) {
+const destination =
+  user.role === 'ADMIN'
+    ? '/admin'
+    : user.role === 'AGENT'
+      ? '/agent'
+      : `/pay/${user.tenantId}`;      if (onNavigate) {
         onNavigate(destination);
       } else if (typeof window !== 'undefined') {
         window.location.href = destination;

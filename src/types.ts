@@ -48,16 +48,21 @@ export interface PaymentRecord {
   date: string;
   dueDate?: string;
   receiptNumber?: string;
+
   agentId?: string;
   agentName?: string;
   agentCommissionAmount?: number;
   agentCommissionRemitted?: boolean;
+
   multiYearEligible?: boolean;
+  leaseYears?: number;
+  autoEmailReceipt?: boolean;
+
   amountOwed: number;
   amountPaid: number;
   leasePeriod: string;
-  leaseYears?: number;
   phone: string;
+
   misconductStrikes: MisconductRecord[];
 }
 
@@ -88,11 +93,20 @@ export interface MaintenanceComplaint {
   id: string;
   tenantName: string;
   property: string;
-  category: 'Plumbing' | 'Electrical' | 'HVAC & Cooling' | 'Structural' | 'Gate & Security';
+  category:
+    | 'Plumbing'
+    | 'Electrical'
+    | 'HVAC & Cooling'
+    | 'Structural'
+    | 'Gate & Security';
   description: string;
   priority: 'Low' | 'Medium' | 'High' | 'Emergency';
   submittedAt: string;
-  status: 'Submitted' | 'In Review' | 'Technician Assigned' | 'Resolved';
+  status:
+    | 'Submitted'
+    | 'In Review'
+    | 'Technician Assigned'
+    | 'Resolved';
 }
 
 export interface ShortletBooking {
@@ -104,7 +118,10 @@ export interface ShortletBooking {
   guestPhone?: string;
   source: 'AIRBNB' | 'DIRECT';
   airbnbReservationCode?: string;
-  syncMethod: 'Airbnb API v2' | 'iCal Sync' | 'Direct PropertyPro Pay';
+  syncMethod:
+    | 'Airbnb API v2'
+    | 'iCal Sync'
+    | 'Direct PropertyPro Pay';
   checkIn: string;
   checkOut: string;
   nights: number;

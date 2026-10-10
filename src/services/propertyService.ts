@@ -1,70 +1,124 @@
 import { PropertyItem } from '../types';
-import { MOCK_PROPERTIES } from '../data/mockData';
 
-const STORAGE_KEY = 'fugson_properties_v4';
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const API_URL = import.meta.env.VITE_API_URL;
 
-function loadStoredProperties(): PropertyItem[] {
-  if (typeof window === 'undefined') return MOCK_PROPERTIES;
-  try {
-    // Purge legacy storage keys that held demo data
-    localStorage.removeItem('fugson_properties_v3');
-    localStorage.removeItem('fugson_properties_v2');
-    localStorage.removeItem('propertypro_properties');
-    localStorage.removeItem('propertypro_properties_v2');
+function getHeaders() {
+  const token = localStorage.getItem('auth_token');
 
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      return JSON.parse(raw);
-    }
-  } catch (err) {
-    console.error('Failed to parse properties from localStorage', err);
-  }
-  return MOCK_PROPERTIES;
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
 }
 
-function saveStoredProperties(properties: PropertyItem[]) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(properties));
-  } catch (err) {
-    console.error('Failed to save properties to localStorage', err);
-  }
-}
+async function handleResponse<T>(response: Response): Promise<T> {
+  const data = await response.json().catch(() => null);
 
-let inMemoryProperties: PropertyItem[] = loadStoredProperties();
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+        data?.message ||
+        `Request failed with status ${response.status}`
+    );
+  }
+
+  return data as T;
+}
 
 export const propertyService = {
   async getProperties(): Promise<PropertyItem[]> {
-    await delay(100);
-    inMemoryProperties = loadStoredProperties();
-    return inMemoryProperties;
+    const response = await fetch(`${API_URL}/api/properties`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+
+    return handleResponse<PropertyItem[]>(response);
   },
 
   async getPropertyById(id: string): Promise<PropertyItem | undefined> {
-    await delay(100);
-    inMemoryProperties = loadStoredProperties();
-    return inMemoryProperties.find((p) => p.id === id);
+    const response = await fetch(`${API_URL}/api/properties/${id}`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+
+    if (response.status === 404) {
+      return undefined;
+    }
+
+    return handleResponse<PropertyItem>(response);
   },
 
   async addProperty(property: PropertyItem): Promise<PropertyItem> {
-    await delay(100);
-    inMemoryProperties = [property, ...inMemoryProperties];
-    saveStoredProperties(inMemoryProperties);
-    return property;
+    const locationParts = property.location
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    const address = locationParts[0] || property.location || property.name;
+    const city = locationParts[1] || '';
+
+    const response = await fetch(`${API_URL}/api/properties`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({
+        name: property.name,
+        address,
+        city,
+        country: 'Nigeria',
+        currency: 'NGN',
+        type: property.type,
+        units: property.units,
+        agent_id: property.assignedAgentId || null,
+      }),
+    });
+
+    return handleResponse<PropertyItem>(response);
   },
 
-  async updateProperty(id: string, updates: Partial<PropertyItem>): Promise<PropertyItem | undefined> {
-    await delay(100);
-    inMemoryProperties = inMemoryProperties.map((p) => (p.id === id ? { ...p, ...updates } : p));
-    saveStoredProperties(inMemoryProperties);
-    return inMemoryProperties.find((p) => p.id === id);
+  async updateProperty(
+    id: string,
+    updates: Partial<PropertyItem>
+  ): Promise<PropertyItem> {
+    const locationParts = updates.location
+      ?.split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    const body: Record<string, unknown> = {};
+
+    if (updates.name !== undefined) body.name = updates.name;
+    if (updates.type !== undefined) body.type = updates.type;
+    if (updates.units !== undefined) body.units = updates.units;
+    if (updates.occupiedUnits !== undefined) {
+      body.occupied_units = updates.occupiedUnits;
+    }
+    if (updates.status !== undefined) body.status = updates.status;
+    if (updates.assignedAgentId !== undefined) {
+      body.agent_id = updates.assignedAgentId || null;
+    }
+
+    if (updates.location !== undefined) {
+      body.address = locationParts?.[0] || updates.location;
+      body.city = locationParts?.[1] || '';
+    }
+
+    const response = await fetch(`${API_URL}/api/properties/${id}`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify(body),
+    });
+
+    return handleResponse<PropertyItem>(response);
   },
 
   async deleteProperty(id: string): Promise<boolean> {
-    await delay(100);
-    inMemoryProperties = inMemoryProperties.filter((p) => p.id !== id);
-    saveStoredProperties(inMemoryProperties);
+    const response = await fetch(`${API_URL}/api/properties/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+
+    await handleResponse(response);
+
     return true;
   },
 };

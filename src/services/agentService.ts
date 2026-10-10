@@ -1,70 +1,126 @@
 import { AgentItem } from '../types';
-import { MOCK_AGENTS } from '../data/mockData';
 
-const STORAGE_KEY = 'fugson_agents_v4';
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const API_URL = import.meta.env.VITE_API_URL;
 
-function loadStoredAgents(): AgentItem[] {
-  if (typeof window === 'undefined') return MOCK_AGENTS;
-  try {
-    // Purge legacy storage keys that held demo data
-    localStorage.removeItem('fugson_agents_v3');
-    localStorage.removeItem('fugson_agents_v2');
-    localStorage.removeItem('propertypro_agents');
-    localStorage.removeItem('propertypro_agents_v2');
+function getHeaders() {
+  const token = localStorage.getItem('auth_token');
 
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      return JSON.parse(raw);
-    }
-  } catch (err) {
-    console.error('Failed to parse agents from localStorage', err);
-  }
-  return MOCK_AGENTS;
+  return {
+    'Content-Type': 'application/json',
+    ...(token
+      ? {
+          Authorization: `Bearer ${token}`,
+        }
+      : {}),
+  };
 }
 
-function saveStoredAgents(agents: AgentItem[]) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(agents));
-  } catch (err) {
-    console.error('Failed to save agents to localStorage', err);
+async function handleResponse<T>(
+  response: Response
+): Promise<T> {
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+        data?.message ||
+        'Request failed'
+    );
   }
+
+  return data as T;
 }
 
-let inMemoryAgents: AgentItem[] = loadStoredAgents();
+export interface CreateAgentPayload {
+  name: string;
+  email: string;
+  phone: string;
+  specialty?: string;
+  commission_rate?: number;
+  status?: string;
+  password: string;
+}
 
 export const agentService = {
   async getAgents(): Promise<AgentItem[]> {
-    await delay(100);
-    inMemoryAgents = loadStoredAgents();
-    return inMemoryAgents;
+    const response = await fetch(
+      `${API_URL}/api/agents`,
+      {
+        method: 'GET',
+        headers: getHeaders(),
+      }
+    );
+
+    return handleResponse<AgentItem[]>(response);
   },
 
-  async getAgentById(id: string): Promise<AgentItem | undefined> {
-    await delay(100);
-    inMemoryAgents = loadStoredAgents();
-    return inMemoryAgents.find((a) => a.id === id);
+  async getAgentById(
+    id: string
+  ): Promise<AgentItem | undefined> {
+    const agents = await this.getAgents();
+
+    return agents.find(
+      (agent) => agent.id === id
+    );
   },
 
-  async addAgent(agent: AgentItem): Promise<AgentItem> {
-    await delay(100);
-    inMemoryAgents = [agent, ...inMemoryAgents];
-    saveStoredAgents(inMemoryAgents);
-    return agent;
+  async addAgent(
+    agent: CreateAgentPayload
+  ): Promise<AgentItem> {
+    const response = await fetch(
+      `${API_URL}/api/agents`,
+      {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          name: agent.name,
+          email: agent.email,
+          phone: agent.phone,
+          specialty: agent.specialty || '',
+          commission_rate:
+            agent.commission_rate ?? 10,
+          status: agent.status || 'Active',
+          password: agent.password,
+        }),
+      }
+    );
+
+    return handleResponse<AgentItem>(response);
   },
 
-  async updateAgent(id: string, updates: Partial<AgentItem>): Promise<AgentItem | undefined> {
-    await delay(100);
-    inMemoryAgents = inMemoryAgents.map((a) => (a.id === id ? { ...a, ...updates } : a));
-    saveStoredAgents(inMemoryAgents);
-    return inMemoryAgents.find((a) => a.id === id);
+  async updateAgent(
+    id: string,
+    updates: Partial<AgentItem>
+  ): Promise<AgentItem | undefined> {
+    throw new Error(
+      'Agent update is not currently supported by the backend.'
+    );
   },
 
-  async deleteAgent(id: string): Promise<boolean> {
-    await delay(100);
-    inMemoryAgents = inMemoryAgents.filter((a) => a.id !== id);
-    saveStoredAgents(inMemoryAgents);
+  async deleteAgent(
+    id: string
+  ): Promise<boolean> {
+    throw new Error(
+      'Agent deletion is not currently supported by the backend.'
+    );
+  },
+
+  async remitCommission(
+    commissionId: string
+  ): Promise<boolean> {
+    const response = await fetch(
+      `${API_URL}/api/agents/commissions/${commissionId}/remit`,
+      {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          is_remitted: true,
+        }),
+      }
+    );
+
+    await handleResponse(response);
+
     return true;
   },
 };

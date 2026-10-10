@@ -39,6 +39,7 @@ export interface ShortletItem {
 
 export interface PaymentRecord {
   id: string;
+  propertyId?: string;
   tenantName: string;
   tenantEmail: string;
   property: string;
@@ -63,6 +64,11 @@ export interface PaymentRecord {
   leasePeriod: string;
   phone: string;
 
+  nextOfKinName?: string;
+  nextOfKinRelationship?: string;
+  nextOfKinPhone?: string;
+  emergencyContact?: string;
+
   misconductStrikes: MisconductRecord[];
 }
 
@@ -79,7 +85,13 @@ export interface MisconductRecord {
 export interface PropertyItem {
   id: string;
   name: string;
-  type: 'Residential' | 'Commercial' | 'Mixed-Use Development' | 'Shortlet Villa';
+  type:
+    | 'Residential'
+    | 'Commercial'
+    | 'Commercial Agro-Hub'
+    | 'Mixed-Use Development'
+    | 'Farmland'
+    | 'Shortlet Villa';
   location: string;
   units: number;
   occupiedUnits: number;

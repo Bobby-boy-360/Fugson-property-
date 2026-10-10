@@ -1,118 +1,255 @@
 import { PaymentRecord, MisconductRecord } from '../types';
-import { INITIAL_TENANT_PAYMENTS } from '../data/mockData';
+import { propertyService } from './propertyService';
 
-const STORAGE_KEY = 'fugson_tenants_v4';
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const API_URL = import.meta.env.VITE_API_URL;
 
-function loadStoredTenants(): PaymentRecord[] {
-  if (typeof window === 'undefined') return INITIAL_TENANT_PAYMENTS;
-  try {
-    // Purge legacy storage keys that held demo data
-    localStorage.removeItem('fugson_tenants_v3');
-    localStorage.removeItem('fugson_tenants_v2');
-    localStorage.removeItem('propertypro_tenants');
-    localStorage.removeItem('propertypro_tenants_v2');
+function getHeaders() {
+  const token = localStorage.getItem('auth_token');
 
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      return JSON.parse(raw);
-    }
-  } catch (err) {
-    console.error('Failed to parse tenants from localStorage', err);
-  }
-  return INITIAL_TENANT_PAYMENTS;
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
 }
 
-function saveStoredTenants(tenants: PaymentRecord[]) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tenants));
-  } catch (err) {
-    console.error('Failed to save tenants to localStorage', err);
-  }
-}
+async function handleResponse<T>(response: Response): Promise<T> {
+  const data = await response.json().catch(() => null);
 
-let inMemoryTenants: PaymentRecord[] = loadStoredTenants();
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+        data?.message ||
+        `Request failed with status ${response.status}`
+    );
+  }
+
+  return data as T;
+}
 
 export const tenantService = {
   async getTenants(): Promise<PaymentRecord[]> {
-    await delay(100);
-    inMemoryTenants = loadStoredTenants();
-    return inMemoryTenants;
+    const response = await fetch(`${API_URL}/api/tenants`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+
+    return handleResponse<PaymentRecord[]>(response);
+  },
+
+  async getMyTenant(): Promise<PaymentRecord> {
+    const response = await fetch(`${API_URL}/api/tenants/me`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+
+    return handleResponse<PaymentRecord>(response);
   },
 
   async getTenantsByAgent(agentId: string): Promise<PaymentRecord[]> {
-    await delay(100);
-    inMemoryTenants = loadStoredTenants();
-    return inMemoryTenants.filter((t) => t.agentId === agentId);
+    const response = await fetch(
+      `${API_URL}/api/tenants/by-agent/${agentId}`,
+      {
+        method: 'GET',
+        headers: getHeaders(),
+      }
+    );
+
+    return handleResponse<PaymentRecord[]>(response);
   },
 
-  async getTenantById(id: string): Promise<PaymentRecord | undefined> {
-    await delay(100);
-    inMemoryTenants = loadStoredTenants();
-    return inMemoryTenants.find((t) => t.id === id);
+  async getTenantById(
+    id: string
+  ): Promise<PaymentRecord | undefined> {
+    const response = await fetch(`${API_URL}/api/tenants/${id}`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+
+    if (response.status === 404) {
+      return undefined;
+    }
+
+    return handleResponse<PaymentRecord>(response);
   },
 
-  async addTenant(newTenant: PaymentRecord): Promise<PaymentRecord> {
-    await delay(100);
-    inMemoryTenants = [newTenant, ...inMemoryTenants];
-    saveStoredTenants(inMemoryTenants);
-    return newTenant;
+  async addTenant(
+    newTenant: PaymentRecord,
+    password: string
+  ): Promise<PaymentRecord> {
+    if (!password || password.length < 6) {
+      throw new Error('Tenant password must be at least 6 characters.');
+    }
+
+    const properties = await propertyService.getProperties();
+
+    const enteredProperty = String(newTenant.property || '').trim();
+
+    if (!enteredProperty) {
+      throw new Error('Please select or enter a property.');
+    }
+
+    const normalizedProperty = enteredProperty.toLowerCase();
+
+    const property = properties.find((item) => {
+      const propertyId = String(item.id || '').trim().toLowerCase();
+      const propertyName = String(item.name || '').trim().toLowerCase();
+
+      return (
+        propertyId === normalizedProperty ||
+        propertyName === normalizedProperty
+      );
+    });
+
+    if (!property) {
+      const availableProperties = properties
+        .map((item) => item.name)
+        .filter(Boolean)
+        .join(', ');
+
+      throw new Error(
+        availableProperties
+          ? `Property "${enteredProperty}" was not found. Available properties: ${availableProperties}`
+          : 'No properties are currently available. Please create a property first.'
+      );
+    }
+
+    const response = await fetch(`${API_URL}/api/tenants`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({
+        property_id: property.id,
+        name: newTenant.tenantName.trim(),
+        email: newTenant.tenantEmail.trim().toLowerCase(),
+        phone: newTenant.phone,
+        rent_amount: newTenant.amount,
+        rent_cycle: 'monthly',
+        multi_year_eligible: newTenant.multiYearEligible ?? false,
+        password,
+      }),
+    });
+
+    const created = await handleResponse<{ id: string }>(response);
+    const createdTenant = await this.getTenantById(created.id);
+
+    if (!createdTenant) {
+      throw new Error(
+        'Tenant was created but could not be retrieved.'
+      );
+    }
+
+    return createdTenant;
   },
 
-  async updateTenant(tenantId: string, updates: Partial<PaymentRecord>): Promise<PaymentRecord | undefined> {
-    await delay(100);
-    inMemoryTenants = inMemoryTenants.map((t) => (t.id === tenantId ? { ...t, ...updates } : t));
-    saveStoredTenants(inMemoryTenants);
-    return inMemoryTenants.find((t) => t.id === tenantId);
+  async updateTenant(
+    tenantId: string,
+    updates: Partial<PaymentRecord>
+  ): Promise<PaymentRecord> {
+    console.trace(
+      '[PropertyPro] updateTenant called',
+      { tenantId, updates }
+    );
+
+    const response = await fetch(
+      `${API_URL}/api/tenants/${tenantId}`,
+      {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          name: updates.tenantName,
+          email: updates.tenantEmail,
+          phone: updates.phone,
+          rent_amount: updates.amount,
+          rent_cycle: 'monthly',
+        }),
+      }
+    );
+
+    return handleResponse<PaymentRecord>(response);
   },
 
   async deleteTenant(tenantId: string): Promise<boolean> {
-    await delay(100);
-    inMemoryTenants = inMemoryTenants.filter((t) => t.id !== tenantId);
-    saveStoredTenants(inMemoryTenants);
+    const response = await fetch(
+      `${API_URL}/api/tenants/${tenantId}`,
+      {
+        method: 'DELETE',
+        headers: getHeaders(),
+      }
+    );
+
+    await handleResponse(response);
     return true;
   },
 
-  async addMisconduct(tenantId: string, misconduct: MisconductRecord): Promise<boolean> {
-    await delay(100);
-    inMemoryTenants = inMemoryTenants.map((t) => {
-      if (t.id === tenantId) {
-        return {
-          ...t,
-          misconductStrikes: [misconduct, ...(t.misconductStrikes || [])],
-        };
+  async addMisconduct(
+    tenantId: string,
+    misconduct: MisconductRecord
+  ): Promise<MisconductRecord> {
+    const response = await fetch(
+      `${API_URL}/api/tenants/${tenantId}/misconduct`,
+      {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          offenseTitle: misconduct.offenseTitle,
+          description: misconduct.description,
+          penaltyAmount: misconduct.penaltyAmount,
+          proofImageUrl: misconduct.proofImageUrl,
+          date: misconduct.date,
+        }),
       }
-      return t;
-    });
-    saveStoredTenants(inMemoryTenants);
-    return true;
+    );
+
+    const created = await handleResponse<any>(response);
+
+    return {
+      id: created.id,
+      tenantId: created.tenant_id ?? tenantId,
+      date: created.occurred_at ?? misconduct.date,
+      offenseTitle: created.offense_title ?? misconduct.offenseTitle,
+      description: created.description ?? misconduct.description,
+      penaltyAmount:
+        created.penalty_amount ?? misconduct.penaltyAmount,
+      proofImageUrl:
+        created.proof_image_url ?? misconduct.proofImageUrl,
+    };
   },
 
   async remitCommission(tenantId: string): Promise<boolean> {
-    await delay(100);
-    inMemoryTenants = inMemoryTenants.map((t) =>
-      t.id === tenantId ? { ...t, agentCommissionRemitted: true } : t
+    const response = await fetch(
+      `${API_URL}/api/tenants/${tenantId}/remit-commission`,
+      {
+        method: 'PUT',
+        headers: getHeaders(),
+      }
     );
-    saveStoredTenants(inMemoryTenants);
+
+    await handleResponse(response);
     return true;
   },
 
-  async toggleMultiYear(tenantId: string, isEligible: boolean): Promise<boolean> {
-    await delay(100);
-    inMemoryTenants = inMemoryTenants.map((t) =>
-      t.id === tenantId ? { ...t, multiYearEligible: isEligible } : t
+  async toggleMultiYear(
+    tenantId: string,
+    isEligible: boolean
+  ): Promise<boolean> {
+    const response = await fetch(
+      `${API_URL}/api/tenants/${tenantId}/multi-year`,
+      {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({ isEligible }),
+      }
     );
-    saveStoredTenants(inMemoryTenants);
+
+    await handleResponse(response);
     return true;
   },
 
-  async toggleAutoEmailReceipt(tenantId: string, enabled: boolean): Promise<boolean> {
-    await delay(100);
-    inMemoryTenants = inMemoryTenants.map((t) =>
-      t.id === tenantId ? { ...t, autoEmailReceipt: enabled } : t
+  async toggleAutoEmailReceipt(
+    _tenantId: string,
+    _enabled: boolean
+  ): Promise<boolean> {
+    throw new Error(
+      'Auto email receipt settings are not currently supported by the backend.'
     );
-    saveStoredTenants(inMemoryTenants);
-    return true;
   },
 };

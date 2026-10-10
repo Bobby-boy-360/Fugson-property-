@@ -1,23 +1,19 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Building2,
   ShieldCheck,
   CreditCard,
-  Download,
   FileText,
   Wrench,
   CheckCircle2,
   Clock,
   X,
   Send,
-  Lock,
   FileCheck,
   Info,
   LogOut,
-  Users,
-  AlertOctagon,
   Mail,
 } from 'lucide-react';
 
@@ -27,1358 +23,1090 @@ import { PaymentRecord } from '@/src/types';
 import { tenantService } from '@/src/services/tenantService';
 
 interface TenantPortalProps {
-  params?: {
-    token?: string;
-  };
+  params?: { token?: string };
   onNavigate?: (path: string) => void;
 }
+
+type User = {
+  id?: string;
+  name?: string;
+  email?: string;
+  role?: string;
+  agentId?: string;
+  [key: string]: unknown;
+};
+
+type ReceiptResult = {
+  payment?: {
+    receipt_number?: string;
+    receiptNumber?: string;
+  };
+  receipt_number?: string;
+  receiptNumber?: string;
+  message?: string;
+  error?: string;
+  authorization_url?: string;
+};
+
+const API_URL = String(import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
 export default function TenantPublicPortal({
   params,
   onNavigate,
 }: TenantPortalProps) {
-  const currentUser =
-    typeof window !== 'undefined' ? getCurrentUser() : null;
-
-  const initialTenantId = currentUser?.tenantId || '';
-
-  const [selectedTenantId, setSelectedTenantId] =
-    useState<string>(initialTenantId);
-
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [tenants, setTenants] = useState<PaymentRecord[]>([]);
+  const [selectedTenantId, setSelectedTenantId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   const [showHouseRules, setShowHouseRules] = useState(false);
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [showReceiptModal, setShowReceiptModal] =
-    useState<string | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showReceiptModal, setShowReceiptModal] = useState<string | null>(null);
 
-  const [paymentMethod, setPaymentMethod] =
-    useState<'CARD' | 'TRANSFER'>('CARD');
+  const [toastMessage, setToastMessage] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'CARD' | 'TRANSFER'>('CARD');
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [leaseYears, setLeaseYears] = useState(2);
 
-  const [paymentAmount, setPaymentAmount] = useState<number>(0);
-  const [leaseYears, setLeaseYears] = useState<number>(2);
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-
-  const [maintenanceCategory, setMaintenanceCategory] =
-    useState('Plumbing');
-
+  const [maintenanceCategory, setMaintenanceCategory] = useState('Plumbing');
   const [maintenanceDesc, setMaintenanceDesc] = useState('');
-  const [maintenanceUrgency, setMaintenanceUrgency] =
-    useState('Medium');
-
+  const [maintenanceUrgency, setMaintenanceUrgency] = useState('Medium');
   const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
 
-  const isUnauthorizedTenantView = Boolean(
-  currentUser?.role === 'TENANT' &&
-  currentUser.tenantId &&
-  selectedTenantId &&
-  selectedTenantId !== currentUser.tenantId
-);
+  const verificationStarted = useRef(false);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const role = String(currentUser?.role || '').toUpperCase();
+  const isStaff = role === 'ADMIN' || role === 'AGENT';
+
+  const currentTenant =
+    tenants.find((tenant) => String(tenant.id) === selectedTenantId) ||
+    (isStaff
+      ? tenants.find((tenant) => String(tenant.id) === params?.token) ||
+        tenants[0]
+      : undefined);
+
+  const amountOwed = Number(currentTenant?.amountOwed ?? 0);
+  const amountPaid = Number(currentTenant?.amountPaid ?? 0);
+  const annualRent = Number(currentTenant?.amount ?? 0);
+
+  const adminApprovedMaxYears = Math.max(
+    1,
+    Math.min(
+      4,
+      Number(
+        (currentTenant as any)?.leaseYears ??
+          (currentTenant as any)?.maxAdvanceYears ??
+          2
+      ) || 2
+    )
+  );
+
+  const availableAdvanceYears = [2, 3, 4].filter(
+    (years) => years <= adminApprovedMaxYears
+  );
+
+  const multiYearEligible = Boolean(currentTenant?.multiYearEligible);
+
+  const effectiveLeaseYears = multiYearEligible
+    ? availableAdvanceYears.includes(leaseYears)
+      ? leaseYears
+      : availableAdvanceYears[0] || 2
+    : 1;
+
+  const notify = useCallback((message: string) => {
+    setToastMessage(message);
+
+    if (toastTimer.current) {
+      clearTimeout(toastTimer.current);
+    }
+
+    toastTimer.current = setTimeout(() => {
+      setToastMessage('');
+      toastTimer.current = null;
+    }, 4500);
+  }, []);
 
   useEffect(() => {
-    const fetchTenants = async () => {
+    return () => {
+      if (toastTimer.current) {
+        clearTimeout(toastTimer.current);
+      }
+    };
+  }, []);
+
+  const loadTenantsForUser = useCallback(
+    async (user: User): Promise<PaymentRecord[]> => {
+      const userRole = String(user.role || '').toUpperCase();
+
+      if (userRole === 'TENANT') {
+        const tenant = await tenantService.getMyTenant();
+        return tenant ? [tenant] : [];
+      }
+
+      if (userRole === 'ADMIN') {
+        const result = await tenantService.getTenants();
+        return Array.isArray(result) ? result : [];
+      }
+
+      if (userRole === 'AGENT' && user.agentId) {
+        const result = await tenantService.getTenantsByAgent(
+          String(user.agentId)
+        );
+        return Array.isArray(result) ? result : [];
+      }
+
+      return [];
+    },
+    []
+  );
+
+  // Load the signed-in user and records permitted for their role.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPortal = async () => {
+      setIsLoading(true);
+
       try {
-        setIsLoading(true);
+        let user: User | null = null;
 
-        const data = await tenantService.getTenants();
+        try {
+          const savedUser = localStorage.getItem('auth_user');
 
-        setTenants(data);
+          if (savedUser) {
+            user = JSON.parse(savedUser) as User;
+          }
+        } catch {
+          user = null;
+        }
 
-        if (data.length === 0) {
+        if (!user) {
+          user = (getCurrentUser() as User | null) || null;
+        }
+
+        if (cancelled) return;
+
+        setCurrentUser(user);
+
+        if (!user) {
+          setTenants([]);
           setSelectedTenantId('');
           return;
         }
 
-        if (currentUser?.role === 'TENANT' && currentUser.tenantId) {
-          const ownTenant = data.find(
-            (tenant) => tenant.id === currentUser.tenantId
-          );
+        const loadedTenants = await loadTenantsForUser(user);
 
+        if (cancelled) return;
+
+        setTenants(loadedTenants);
+
+        const preferredTenant = loadedTenants.find(
+          (tenant) => String(tenant.id) === params?.token
+        );
+
+        if (String(user.role || '').toUpperCase() === 'TENANT') {
+          setSelectedTenantId(String(loadedTenants[0]?.id || ''));
+        } else {
           setSelectedTenantId(
-            ownTenant?.id || currentUser.tenantId
+            String(preferredTenant?.id || loadedTenants[0]?.id || '')
           );
-
-          return;
-        }
-
-        if (
-          params?.token &&
-          data.some((tenant) => tenant.id === params.token)
-        ) {
-          setSelectedTenantId(params.token);
-          return;
-        }
-
-        if (
-          initialTenantId &&
-          data.some((tenant) => tenant.id === initialTenantId)
-        ) {
-          setSelectedTenantId(initialTenantId);
-          return;
-        }
-
-        if (
-          currentUser?.role === 'ADMIN' ||
-          currentUser?.role === 'AGENT'
-        ) {
-          setSelectedTenantId(data[0].id);
         }
       } catch (error) {
-        console.error('Failed to load tenant portal:', error);
-        setTenants([]);
+        console.error('Unable to load tenant portal:', error);
+
+        if (!cancelled) {
+          setTenants([]);
+          setSelectedTenantId('');
+          notify(
+            'Unable to load tenant records. Check your access and reload the page.'
+          );
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
-    fetchTenants();
-  }, [
-    currentUser?.role,
-    currentUser?.tenantId,
-    initialTenantId,
-    params?.token,
-  ]);
+    void loadPortal();
 
-  const currentTenant =
-    tenants.find((tenant) => tenant.id === selectedTenantId) ||
-    (currentUser?.role === 'ADMIN' || currentUser?.role === 'AGENT'
-      ? tenants[0]
-      : undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [params?.token, loadTenantsForUser, notify]);
 
-  const adminApprovedMaxYears = (() => {
-    if (!currentTenant) {
-      return 2;
-    }
-
-    if (
-      currentTenant.leaseYears &&
-      currentTenant.leaseYears >= 2
-    ) {
-      return Math.min(4, currentTenant.leaseYears);
-    }
-
-    if (currentTenant.leasePeriod) {
-      const match = currentTenant.leasePeriod.match(
-        /(\d+)\s*(?:year|yr)/i
-      );
-
-      if (match) {
-        return Math.min(
-          4,
-          Math.max(2, parseInt(match[1], 10))
-        );
-      }
-
-      const directNumber =
-        currentTenant.leasePeriod.trim().match(/^(\d+)$/);
-
-      if (directNumber) {
-        return Math.min(
-          4,
-          Math.max(2, parseInt(directNumber[1], 10))
-        );
-      }
-    }
-
-    return 2;
-  })();
-
-  const availableAdvanceYears = [2, 3, 4].filter(
-    (year) => year <= adminApprovedMaxYears
-  );
-
-  const effectiveLeaseYears = availableAdvanceYears.includes(
-    leaseYears
-  )
-    ? leaseYears
-    : availableAdvanceYears[0] || 2;
-
+  // Update the suggested amount when the tenant or lease period changes.
   useEffect(() => {
     if (!currentTenant) {
+      setPaymentAmount(0);
       return;
     }
 
-    if (currentTenant.multiYearEligible) {
-      const initialYear = availableAdvanceYears[0] || 2;
+    if (multiYearEligible) {
+      const years = availableAdvanceYears.includes(leaseYears)
+        ? leaseYears
+        : availableAdvanceYears[0] || 2;
 
-      setLeaseYears(initialYear);
-
-      const annualRate =
-        currentTenant.amount > 0
-          ? currentTenant.amount
-          : 2500000;
-
-      setPaymentAmount(annualRate * initialYear);
-      return;
+      setPaymentAmount(annualRent * years);
+    } else {
+      setPaymentAmount(Math.max(0, amountOwed));
     }
-
-    if (currentTenant.amountOwed > 0) {
-      setLeaseYears(1);
-      setPaymentAmount(currentTenant.amountOwed);
-      return;
-    }
-
-    setLeaseYears(1);
-    setPaymentAmount(currentTenant.amount);
   }, [
     currentTenant?.id,
-    currentTenant?.amountOwed,
     currentTenant?.amount,
+    currentTenant?.amountOwed,
     currentTenant?.multiYearEligible,
-    currentTenant?.leaseYears,
-    currentTenant?.leasePeriod,
-    adminApprovedMaxYears,
+    leaseYears,
+    multiYearEligible,
+    annualRent,
+    amountOwed,
+    availableAdvanceYears,
   ]);
 
-  const showToast = (message: string) => {
-    setToastMessage(message);
+  // Verify a Paystack callback once the signed-in user has loaded.
+  useEffect(() => {
+    let cancelled = false;
 
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 3500);
-  };
+    const verifyPayment = async () => {
+      if (!currentUser || isLoading) return;
 
-  const handleMaintenanceSubmit = (
-    event: React.FormEvent
+      const url = new URL(window.location.href);
+      const paymentId = url.searchParams.get('payment_id');
+      const reference =
+        url.searchParams.get('reference') ||
+        url.searchParams.get('trxref');
+
+      if (!paymentId || !reference || verificationStarted.current) {
+        return;
+      }
+
+      verificationStarted.current = true;
+
+      const authToken = localStorage.getItem('auth_token');
+
+      if (!authToken) {
+        notify('Your session has expired. Sign in again to check your payment.');
+        return;
+      }
+
+      setIsProcessingPayment(true);
+
+      try {
+        if (!API_URL) {
+          throw new Error('The backend API URL is not configured.');
+        }
+
+        const response = await fetch(
+          `${API_URL}/api/payments/${encodeURIComponent(paymentId)}/verify-paystack`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${authToken}`,
+            },
+            body: JSON.stringify({ reference }),
+          }
+        );
+
+        const result: ReceiptResult = await response
+          .json()
+          .catch(() => ({} as ReceiptResult));
+
+        if (!response.ok) {
+          throw new Error(
+            result.message ||
+              result.error ||
+              'Payment verification failed. Contact support before paying again.'
+          );
+        }
+
+        if (cancelled) return;
+
+        url.searchParams.delete('payment_id');
+        url.searchParams.delete('reference');
+        url.searchParams.delete('trxref');
+        window.history.replaceState({}, '', url.toString());
+
+        const receiptNumber =
+          result.payment?.receipt_number ||
+          result.payment?.receiptNumber ||
+          result.receipt_number ||
+          result.receiptNumber;
+
+        setShowPaymentModal(false);
+
+        if (receiptNumber) {
+          setShowReceiptModal(String(receiptNumber));
+          notify('Payment verified successfully. Your receipt is ready.');
+        } else {
+          notify(
+            'Payment verified, but no receipt number was returned. Contact support if needed.'
+          );
+        }
+
+        try {
+          const refreshed = await loadTenantsForUser(currentUser);
+
+          if (cancelled) return;
+
+          setTenants(refreshed);
+
+          const preferred =
+            refreshed.find(
+              (tenant) => String(tenant.id) === String(currentTenant?.id)
+            ) ||
+            refreshed.find(
+              (tenant) => String(tenant.id) === params?.token
+            ) ||
+            refreshed[0];
+
+          setSelectedTenantId(String(preferred?.id || ''));
+
+          if (!refreshed.length) {
+            notify('Payment verified, but the tenant records could not refresh.');
+          }
+        } catch (refreshError) {
+          console.error(
+            'Payment verified, but tenant refresh failed:',
+            refreshError
+          );
+
+          if (!cancelled) {
+            notify('Payment verified. Reload the portal to refresh your balance.');
+          }
+        }
+      } catch (error) {
+        console.error('Paystack verification error:', error);
+
+        if (!cancelled) {
+          notify(
+            error instanceof Error
+              ? error.message
+              : 'Unable to verify payment. Contact support before trying again.'
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsProcessingPayment(false);
+        }
+      }
+    };
+
+    void verifyPayment();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentUser,
+    isLoading,
+    currentTenant?.id,
+    params?.token,
+    loadTenantsForUser,
+    notify,
+  ]);
+
+  const handleExecutePayment = async (
+    event: React.FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
 
-    if (!maintenanceDesc.trim()) {
+    if (!currentTenant) {
+      notify('No tenant record is selected.');
       return;
     }
 
-    setIsSubmittingTicket(true);
+    if (paymentAmount <= 0 || !Number.isFinite(paymentAmount)) {
+      notify('Enter a valid payment amount.');
+      return;
+    }
 
-    setTimeout(() => {
-      setIsSubmittingTicket(false);
-      setShowMaintenanceModal(false);
-      setMaintenanceDesc('');
+    const authToken = localStorage.getItem('auth_token');
 
-      showToast(
-        'Maintenance complaint #FUG-MNT-912 dispatched to field team.'
+    if (!authToken) {
+      notify('Your session has expired. Please sign in again.');
+      return;
+    }
+
+    if (paymentMethod === 'TRANSFER') {
+      notify(
+        'Bank transfer selected. Obtain verified bank details from your property manager before transferring.'
       );
-    }, 600);
-  };
-
-  const handleExecutePayment = (
-    event: React.FormEvent
-  ) => {
-    event.preventDefault();
-
-    const tenant = currentTenant;
-
-    if (!tenant) {
-      showToast('Tenant information is not available.');
-      return;
-    }
-
-    if (paymentAmount <= 0) {
-      showToast('Please enter a valid payment amount.');
       return;
     }
 
     setIsProcessingPayment(true);
 
-    setTimeout(() => {
-      setIsProcessingPayment(false);
-      setShowPaymentModal(false);
+    try {
+      if (!API_URL) {
+        throw new Error('The backend API URL is not configured.');
+      }
 
-      const newPaidAmount =
-        tenant.amountPaid + paymentAmount;
-
-      const receiptNo = `REC-FUG-${Date.now()
-        .toString()
-        .slice(-6)}`;
-
-      const currentYear = new Date().getFullYear();
-
-      const updatedTenant: PaymentRecord = {
-        ...tenant,
-        id: tenant.id,
-        amountOwed: 0,
-        amountPaid: newPaidAmount,
-        status: 'Paid',
-        receiptNumber: receiptNo,
-        leasePeriod:
-          leaseYears > 1
-            ? `${leaseYears} Years Advance Lease (${currentYear} – ${
-                currentYear + leaseYears
-              })`
-            : tenant.leasePeriod,
-      };
-
-      setTenants((previousTenants) =>
-        previousTenants.map((item) =>
-          item.id === tenant.id ? updatedTenant : item
-        )
+      const response = await fetch(
+        `${API_URL}/api/payments/initialize-paystack`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            years: multiYearEligible ? effectiveLeaseYears : 1,
+            callback_url: window.location.href.split('?')[0],
+          }),
+        }
       );
 
-      tenantService
-        .updateTenant(tenant.id, updatedTenant)
-        .catch((error) => {
-          console.error(
-            'Failed to update tenant after payment:',
-            error
-          );
-        });
+      const result: ReceiptResult = await response
+        .json()
+        .catch(() => ({} as ReceiptResult));
 
-      if (tenant.autoEmailReceipt) {
-        showToast(
-          `Payment confirmed! Official receipt #${receiptNo} automatically emailed to ${
-            tenant.tenantEmail || 'your email'
-          }.`
-        );
-      } else {
-        showToast(
-          `Payment of ${formatNaira(
-            paymentAmount
-          )} confirmed! Receipt generated.`
+      if (!response.ok) {
+        throw new Error(
+          result.message || result.error || 'Unable to initialize payment.'
         );
       }
-    }, 900);
+
+      if (!result.authorization_url) {
+        throw new Error('The payment provider did not return a payment link.');
+      }
+
+      // Preserve the existing Paystack redirect.
+      window.location.assign(result.authorization_url);
+    } catch (error) {
+      console.error('Unable to initialize Paystack payment:', error);
+
+      notify(
+        error instanceof Error
+          ? error.message
+          : 'Unable to start payment. Please try again.'
+      );
+
+      setIsProcessingPayment(false);
+    }
   };
 
-  const handleExitPortal = () => {
+  // Submit a maintenance complaint. The backend resolves the tenant's
+  // linked property, so the frontend does not need to supply property_id.
+  const handleMaintenanceSubmit = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+
+    if (!maintenanceDesc.trim()) {
+      notify('Please describe the maintenance issue.');
+      return;
+    }
+
+    const authToken = localStorage.getItem('auth_token');
+
+    if (!authToken) {
+      notify('Your session has expired. Please sign in again.');
+      return;
+    }
+
+    if (!API_URL) {
+      notify('The backend API URL is not configured.');
+      return;
+    }
+
+    setIsSubmittingTicket(true);
+
+    try {
+      const response = await fetch(`${API_URL}/api/complaints`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          category: maintenanceCategory,
+          description: `[Urgency: ${maintenanceUrgency}] ${maintenanceDesc.trim()}`,
+        }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          result.message ||
+            result.error ||
+            'Unable to submit the maintenance request.'
+        );
+      }
+
+      setShowMaintenanceModal(false);
+      setMaintenanceDesc('');
+      setMaintenanceCategory('Plumbing');
+      setMaintenanceUrgency('Medium');
+
+      notify(
+        'Maintenance request submitted successfully. Your property manager has been notified.'
+      );
+    } catch (error) {
+      console.error('Maintenance complaint submission failed:', error);
+
+      notify(
+        error instanceof Error
+          ? error.message
+          : 'Unable to submit your maintenance request. Please try again.'
+      );
+    } finally {
+      setIsSubmittingTicket(false);
+    }
+  };
+
+  const handleExit = () => {
     logout();
 
     if (onNavigate) {
       onNavigate('/login');
-    } else if (typeof window !== 'undefined') {
+    } else {
       window.location.href = '/login';
+    }
+  };
+
+  const handleOpenReceipt = () => {
+    const savedReceipt =
+      (currentTenant as any)?.receiptNumber ||
+      (currentTenant as any)?.receipt_number;
+
+    if (savedReceipt) {
+      setShowReceiptModal(String(savedReceipt));
+    } else {
+      notify(
+        'No saved receipt was found. Complete a verified payment or check your payment records.'
+      );
     }
   };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#F4F5F7] flex items-center justify-center text-slate-500 text-xs">
-        Loading Tenant Portal...
-      </div>
+      <main className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="flex items-center gap-3 text-slate-600">
+          <Clock className="animate-spin" size={20} />
+          Loading Tenant Portal...
+        </div>
+      </main>
     );
   }
 
-  if (isUnauthorizedTenantView) {
+  if (!currentUser || !currentTenant) {
     return (
-      <div className="min-h-screen bg-[#F4F5F7] flex flex-col items-center justify-center px-4 font-sans text-center">
-        <div className="max-w-md bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
-            <Lock className="w-6 h-6" />
-          </div>
+      <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
+        <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <Building2 className="mx-auto mb-4 text-emerald-800" size={42} />
 
-          <h2 className="text-lg font-bold text-slate-900">
-            Access Restricted
-          </h2>
+          <h1 className="text-xl font-bold text-slate-900">Tenant Portal</h1>
 
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Tenants are strictly restricted to their own resident
-            portal. You do not have permission to view other
-            residents&apos; accounts.
+          <p className="mt-3 text-sm text-slate-600">
+            {!currentUser
+              ? 'Please sign in to access your tenant portal.'
+              : 'No tenant record is available for this account, or your account does not have permission to view it.'}
           </p>
 
-          <div className="pt-2 flex justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                const target = `/pay/${currentUser?.tenantId}`;
-
-                if (onNavigate) {
-                  onNavigate(target);
-                } else if (typeof window !== 'undefined') {
-                  window.location.href = target;
-                }
-              }}
-              className="px-4 py-2 bg-[#12897F] text-white text-xs font-semibold rounded-xl hover:bg-[#0f766e] transition cursor-pointer"
-            >
-              Go to My Resident Portal
-            </button>
-          </div>
+          <button
+            onClick={handleExit}
+            className="mt-6 rounded-lg bg-emerald-800 px-5 py-3 font-semibold text-white hover:bg-emerald-900"
+          >
+            Return to Login
+          </button>
         </div>
-      </div>
+      </main>
     );
   }
 
-  if (!currentTenant) {
-    return (
-      <div className="min-h-screen bg-[#F4F5F7] flex flex-col items-center justify-center px-4 font-sans text-center">
-        <div className="max-w-md bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-          <div className="w-12 h-12 rounded-2xl bg-teal-50 text-[#12897F] flex items-center justify-center mx-auto">
-            <Building2 className="w-6 h-6" />
-          </div>
-
-          <h2 className="text-lg font-bold text-slate-900">
-            Resident Portal
-          </h2>
-
-          <p className="text-xs text-slate-500 leading-relaxed">
-            No active billing invoice is registered yet for your
-            resident account. Please contact property
-            administration to verify your lease registration.
-          </p>
-
-          <div className="pt-2 flex justify-center gap-2">
-            <button
-              type="button"
-              onClick={handleExitPortal}
-              className="px-4 py-2 bg-[#12897F] text-white text-xs font-semibold rounded-xl hover:bg-[#0f766e] transition cursor-pointer"
-            >
-              Return to Login
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const tenantName = currentTenant.tenantName || currentUser.name || 'Tenant';
+  const tenantProperty =
+    currentTenant.property || currentTenant.unit || 'Property';
+  const tenantEmail = currentTenant.tenantEmail || currentUser.email || '';
 
   return (
-    <div className="min-h-screen bg-[#F4F5F7] text-slate-800 flex flex-col justify-start items-center px-4 py-6 sm:py-10 font-sans">
+    <main className="min-h-screen bg-slate-50 text-slate-800">
       {toastMessage && (
-        <div className="fixed bottom-5 z-50 bg-[#0B1D2E] text-white px-4 py-3 rounded-xl shadow-lg border border-teal-500/40 flex items-center gap-3 text-xs sm:text-sm">
-          <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
+        <div
+          role="status"
+          className="fixed right-4 top-4 z-[100] flex max-w-md items-start gap-3 rounded-xl bg-slate-900 px-4 py-3 text-sm text-white shadow-xl"
+        >
+          <Info className="mt-0.5 shrink-0" size={18} />
 
           <span>{toastMessage}</span>
 
           <button
-            type="button"
-            onClick={() => setToastMessage(null)}
-            className="ml-2 text-slate-400 hover:text-white"
+            onClick={() => setToastMessage('')}
+            aria-label="Dismiss"
           >
-            <X className="w-4 h-4" />
+            <X size={18} />
           </button>
         </div>
       )}
 
-      <div className="w-full max-w-lg mb-4 bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm">
-        <div className="flex items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-teal-50 text-[#12897F] flex items-center justify-center font-bold text-xs">
-              <Users className="w-4 h-4" />
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-emerald-900 p-2 text-white">
+              <Building2 size={24} />
             </div>
 
             <div>
-              <span className="text-[10px] uppercase font-bold text-[#12897F] tracking-wider block">
-                Resident Portal
-              </span>
-
-              <span className="text-xs font-bold text-slate-900">
-                {currentTenant.tenantName}{' '}
-                <span className="text-slate-500 font-normal">
-                  ({currentTenant.unit})
-                </span>
-              </span>
+              <h1 className="font-bold tracking-tight text-slate-900">
+                FUGSON PROPERTY
+              </h1>
+              <p className="text-xs text-slate-500">Resident Portal</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {currentUser &&
-              (currentUser.role === 'ADMIN' ||
-                currentUser.role === 'AGENT') && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const target =
-                      currentUser.role === 'ADMIN'
-                        ? '/admin'
-                        : '/agent';
-
-                    if (onNavigate) {
-                      onNavigate(target);
-                    } else if (
-                      typeof window !== 'undefined'
-                    ) {
-                      window.location.href = target;
-                    }
-                  }}
-                  className="text-xs px-2.5 py-1.5 bg-teal-50 hover:bg-teal-100 text-[#12897F] border border-teal-200 rounded-lg font-semibold transition shrink-0 cursor-pointer"
-                >
-                  Back to{' '}
-                  {currentUser.role === 'ADMIN'
-                    ? 'Admin'
-                    : 'Agent'}
-                </button>
-              )}
+          <div className="flex items-center gap-3">
+            {isStaff && onNavigate && (
+              <button
+                onClick={() =>
+                  onNavigate(role === 'ADMIN' ? '/admin' : '/agent')
+                }
+                className="hidden rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium sm:block"
+              >
+                Back to Dashboard
+              </button>
+            )}
 
             <button
-              type="button"
-              onClick={handleExitPortal}
-              title="Log out and return to Login"
-              className="text-xs px-3 py-1.5 bg-slate-50 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200 hover:border-rose-200 rounded-lg font-semibold transition shrink-0 flex items-center gap-1.5 cursor-pointer"
+              onClick={handleExit}
+              className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
             >
-              <LogOut className="w-3.5 h-3.5" />
+              <LogOut size={16} />
               Sign Out
             </button>
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="w-full max-w-lg space-y-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="bg-[#0B1D2E] px-6 py-6 text-white text-center">
-            <div className="w-12 h-12 rounded-2xl bg-[#12897F] flex items-center justify-center mx-auto mb-3 shadow-md">
-              <Building2 className="w-6 h-6 text-white" />
-            </div>
-
-            <h1 className="font-bold text-xl tracking-tight">
-              Fugson Property
-            </h1>
-
-            <p className="text-xs text-teal-300 font-medium">
-              Tenant Verified Payment Portal
-            </p>
-
-            <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-[11px] text-teal-300">
-              <Mail className="w-3.5 h-3.5 text-[#12897F]" />
-
-              <span>Verified Email Invoicing Link</span>
-
-              <span className="text-[10px] font-bold bg-teal-500/20 text-teal-300 px-1.5 py-0.5 rounded border border-teal-400/30">
-                Email: Verified
-              </span>
-            </div>
+      <div className="mx-auto max-w-7xl px-5 py-8">
+        <section className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div>
+            <p className="text-sm text-slate-500">Welcome back,</p>
+            <h2 className="mt-1 text-2xl font-bold text-slate-900">
+              {tenantName}
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">{tenantProperty}</p>
           </div>
 
-          <div className="p-5 sm:p-6 border-b border-slate-100 bg-slate-50/50">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                  Tenant Name
-                </span>
-
-                <div className="text-base sm:text-lg font-bold text-slate-900 mt-0.5">
-                  {currentTenant.tenantName}
-                </div>
-
-                <div className="text-xs text-slate-600 mt-0.5">
-                  {currentTenant.unit} • {currentTenant.property}
-                </div>
-
-                <div className="text-[11px] text-slate-400 mt-1">
-                  Lease Period:{' '}
-                  <span className="text-slate-700 font-medium">
-                    {currentTenant.leasePeriod}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex flex-col items-end gap-1.5">
-                {currentTenant.status === 'Paid' ? (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Paid
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                    <Clock className="w-3.5 h-3.5" />
-                    Overdue
-                  </span>
-                )}
-
-                {currentTenant.multiYearEligible && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-50 text-[#12897F] border border-teal-200">
-                    Multi-Year Advance Enabled
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {currentTenant.misconductStrikes &&
-              currentTenant.misconductStrikes.length > 0 && (
-                <div className="mt-3.5 p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-start gap-2 text-xs text-rose-800">
-                  <AlertOctagon className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-
-                  <div>
-                    <strong className="font-bold">
-                      Covenant Warning (
-                      {currentTenant.misconductStrikes.length}{' '}
-                      Strike Active):
-                    </strong>{' '}
-
-                    {currentTenant.misconductStrikes[0]
-                      .description}
-                  </div>
-                </div>
-              )}
-          </div>
-
-          <div className="p-5 sm:p-6 space-y-5">
-            <div className="grid grid-cols-2 gap-3.5">
-              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                <span className="text-[11px] font-semibold text-slate-500 uppercase block">
-                  Amount Owed
-                </span>
-
-                <span
-                  className={`text-xl sm:text-2xl font-extrabold mt-1 block tracking-tight ${
-                    currentTenant.amountOwed > 0
-                      ? 'text-amber-600'
-                      : 'text-slate-800'
-                  }`}
-                >
-                  {formatNaira(currentTenant.amountOwed)}
-                </span>
-              </div>
-
-              <div className="bg-emerald-50/60 rounded-xl p-4 border border-emerald-200/80">
-                <span className="text-[11px] font-semibold text-emerald-800 uppercase block">
-                  Amount Paid
-                </span>
-
-                <span className="text-xl sm:text-2xl font-extrabold text-emerald-700 mt-1 block tracking-tight">
-                  {formatNaira(currentTenant.amountPaid)}
-                </span>
-              </div>
-            </div>
-
-            {currentTenant.multiYearEligible && (
-              <div className="p-4 sm:p-5 rounded-xl bg-teal-50/70 border border-teal-200/90 space-y-3.5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4 text-[#12897F]" />
-                      Multi-Year Advance Tenancy Plan
-                    </div>
-
-                    <p className="text-[11px] text-slate-600 mt-0.5">
-                      Admin has enabled advance payment on your
-                      account. Choose the number of years you
-                      want to prepay.
-                    </p>
-                  </div>
-
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-teal-100 text-[#12897F] border border-teal-200 shrink-0">
-                    Admin Approved
-                  </span>
-                </div>
-
-                <div>
-                  <div className="text-[11px] font-bold text-slate-700 mb-2 uppercase tracking-wider flex items-center justify-between">
-                    <span>Select Number of Years:</span>
-
-                    <span className="text-[#12897F] font-bold text-xs">
-                      {effectiveLeaseYears} Years Selected
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2.5">
-                    {availableAdvanceYears.map((years) => {
-                      const isSelected =
-                        effectiveLeaseYears === years;
-
-                      const annualRate =
-                        currentTenant.amount > 0
-                          ? currentTenant.amount
-                          : 2500000;
-
-                      const totalAdvance = annualRate * years;
-
-                      return (
-                        <button
-                          key={years}
-                          type="button"
-                          onClick={() => {
-                            setLeaseYears(years);
-                            setPaymentAmount(totalAdvance);
-                          }}
-                          className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
-                            isSelected
-                              ? 'bg-[#12897F] text-white border-[#12897F] shadow-sm ring-2 ring-teal-600/30'
-                              : 'bg-white text-slate-700 border-slate-200 hover:border-teal-300 hover:bg-teal-50/40'
-                          }`}
-                        >
-                          <div className="text-xs font-bold">
-                            {years} Years
-                          </div>
-
-                          <div
-                            className={`text-[10px] mt-1 font-medium ${
-                              isSelected
-                                ? 'text-teal-100'
-                                : 'text-slate-500'
-                            }`}
-                          >
-                            {formatNaira(totalAdvance)}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="bg-white p-3 rounded-lg border border-teal-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                  <div>
-                    <span className="text-slate-500 text-[11px]">
-                      Advance Coverage:
-                    </span>{' '}
-
-                    <strong className="text-slate-800 font-bold">
-                      {effectiveLeaseYears} Years Extended
-                      Tenancy
-                    </strong>
-
-                    <span className="text-slate-400 text-[11px] ml-1.5">
-                      ({new Date().getFullYear()} –{' '}
-                      {new Date().getFullYear() +
-                        effectiveLeaseYears}
-                      )
-                    </span>
-                  </div>
-
-                  <div className="sm:text-right">
-                    <span className="text-slate-500 text-[11px]">
-                      Total Prepayment:{' '}
-                    </span>
-
-                    <span className="font-extrabold text-[#12897F] text-sm">
-                      {formatNaira(
-                        (currentTenant.amount > 0
-                          ? currentTenant.amount
-                          : 2500000) * effectiveLeaseYears
-                      )}
-                    </span>
-                  </div>
-                </div>
-              </div>
+          <div
+            className={`flex w-fit items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
+              amountOwed > 0
+                ? 'bg-amber-100 text-amber-800'
+                : 'bg-emerald-100 text-emerald-800'
+            }`}
+          >
+            {amountOwed > 0 ? (
+              <Clock size={17} />
+            ) : (
+              <CheckCircle2 size={17} />
             )}
 
-            <div className="space-y-2.5">
+            {amountOwed > 0 ? 'Payment Outstanding' : 'Account Settled'}
+          </div>
+        </section>
+
+        <section className="grid gap-5 md:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-500">Amount Outstanding</p>
+              <CreditCard className="text-emerald-800" size={22} />
+            </div>
+
+            <p className="mt-3 text-3xl font-bold text-slate-900">
+              {formatNaira(amountOwed)}
+            </p>
+
+            <p className="mt-2 text-sm text-slate-500">
+              Balance due on your account
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-500">Amount Paid</p>
+              <ShieldCheck className="text-emerald-800" size={22} />
+            </div>
+
+            <p className="mt-3 text-3xl font-bold text-slate-900">
+              {formatNaira(amountPaid)}
+            </p>
+
+            <p className="mt-2 text-sm text-slate-500">
+              Payments recorded against your account
+            </p>
+          </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">
+                Rent and Payments
+              </h3>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Review your outstanding balance and proceed to secure payment.
+              </p>
+
+              {multiYearEligible && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {availableAdvanceYears.map((years) => (
+                    <button
+                      key={years}
+                      onClick={() => setLeaseYears(years)}
+                      className={`rounded-lg border px-4 py-2 text-sm font-semibold ${
+                        effectiveLeaseYears === years
+                          ? 'border-emerald-800 bg-emerald-800 text-white'
+                          : 'border-slate-200 bg-white text-slate-700'
+                      }`}
+                    >
+                      {years} years
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="sm:text-right">
+              <p className="text-sm text-slate-500">
+                {multiYearEligible
+                  ? `Selected period: ${effectiveLeaseYears} year(s)`
+                  : 'Current outstanding balance'}
+              </p>
+
+              <p className="mt-1 text-2xl font-bold text-slate-900">
+                {formatNaira(
+                  multiYearEligible
+                    ? annualRent * effectiveLeaseYears
+                    : amountOwed
+                )}
+              </p>
+
               <button
-                type="button"
-                id="btn-pay-rent-now"
-                disabled={
-                  currentTenant.amountOwed === 0 &&
-                  !currentTenant.multiYearEligible
-                }
                 onClick={() => {
-                  if (currentTenant.multiYearEligible) {
-                    setPaymentAmount(
-                      (currentTenant.amount > 0
-                        ? currentTenant.amount
-                        : 2500000) * effectiveLeaseYears
-                    );
+                  if (amountOwed <= 0 && !multiYearEligible) {
+                    notify('There is no outstanding balance to pay.');
+                    return;
                   }
 
                   setShowPaymentModal(true);
                 }}
-                className={`w-full py-3.5 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all ${
-                  currentTenant.amountOwed === 0 &&
-                  !currentTenant.multiYearEligible
-                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
-                    : 'bg-[#12897F] hover:bg-[#0f766e] text-white cursor-pointer active:scale-[0.99]'
-                }`}
+                disabled={isProcessingPayment}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-800 px-5 py-3 font-semibold text-white hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
               >
-                <CreditCard className="w-4 h-4" />
-
-                <span>
-                  {currentTenant.multiYearEligible
-                    ? `Prepay ${effectiveLeaseYears} Years Advance (${formatNaira(
-                        (currentTenant.amount > 0
-                          ? currentTenant.amount
-                          : 2500000) * effectiveLeaseYears
-                      )})`
-                    : currentTenant.amountOwed > 0
-                    ? `Pay Rent Now (${formatNaira(
-                        currentTenant.amountOwed
-                      )})`
-                    : 'Pay Rent Now'}
-                </span>
+                <CreditCard size={18} />
+                {isProcessingPayment ? 'Processing...' : 'Pay Rent Now'}
               </button>
-
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500 flex items-start gap-2">
-                <Info className="w-4 h-4 text-[#12897F] shrink-0 mt-0.5" />
-
-                <div className="leading-relaxed">
-                  <strong className="text-slate-700 font-semibold">
-                    Note:{' '}
-                  </strong>
-
-                  {currentTenant.multiYearEligible
-                    ? `Multi-year advance payment is enabled for your account (up to ${adminApprovedMaxYears} years approved). You can select the number of years above to prepay.`
-                    : 'Multi-year payments require Admin approval.'}
-                </div>
-              </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="grid grid-cols-2 gap-3">
+        <section className="mt-6 grid gap-5 md:grid-cols-3">
           <button
-            type="button"
-            id="btn-house-rules"
             onClick={() => setShowHouseRules(true)}
-            className="bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left shadow-sm transition cursor-pointer group"
+            className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-emerald-700"
           >
-            <div className="w-8 h-8 rounded-lg bg-teal-50 text-[#12897F] group-hover:bg-[#12897F] group-hover:text-white flex items-center justify-center mb-2 transition-colors">
-              <FileText className="w-4 h-4" />
-            </div>
-
-            <div className="text-xs font-bold text-slate-900">
-              House Rules
-            </div>
-
-            <div className="text-[11px] text-slate-400 mt-0.5">
-              Estate covenants & community standards
-            </div>
+            <FileText className="mb-3 text-emerald-800" size={25} />
+            <h3 className="font-bold">House Rules</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Review resident guidelines and policies.
+            </p>
           </button>
 
           <button
-            type="button"
-            id="btn-raise-maintenance"
             onClick={() => setShowMaintenanceModal(true)}
-            className="bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left shadow-sm transition cursor-pointer group"
+            className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-emerald-700"
           >
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 group-hover:bg-amber-600 group-hover:text-white flex items-center justify-center mb-2 transition-colors">
-              <Wrench className="w-4 h-4" />
-            </div>
-
-            <div className="text-xs font-bold text-slate-900">
-              Raise Maintenance Complaint
-            </div>
-
-            <div className="text-[11px] text-slate-400 mt-0.5">
-              Borehole, power & facility repairs
-            </div>
+            <Wrench className="mb-3 text-emerald-800" size={25} />
+            <h3 className="font-bold">Maintenance Request</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Describe an issue with your property.
+            </p>
           </button>
-        </div>
-      </div>
 
-      {showHouseRules && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-slate-950/50"
-            onClick={() => setShowHouseRules(false)}
-          />
+          <button
+            onClick={handleOpenReceipt}
+            className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-emerald-700"
+          >
+            <FileCheck className="mb-3 text-emerald-800" size={25} />
+            <h3 className="font-bold">Payment Receipts</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Access the receipt generated for a verified payment.
+            </p>
+          </button>
+        </section>
 
-          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden z-10">
-            <div className="bg-[#0B1D2E] p-5 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-teal-400" />
+        {showHouseRules && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6">
+              <div className="mb-5 flex items-center justify-between">
+                <h3 className="text-xl font-bold">House Rules</h3>
+                <button
+                  onClick={() => setShowHouseRules(false)}
+                  aria-label="Close house rules"
+                >
+                  <X size={22} />
+                </button>
+              </div>
 
-                <h3 className="font-bold text-sm">
-                  Fugson Property House Rules
-                </h3>
+              <div className="space-y-4">
+                {(HOUSE_RULES as any[]).map((rule, index) => (
+                  <div
+                    key={rule.id || index}
+                    className="rounded-lg bg-slate-50 p-4"
+                  >
+                    <h4 className="font-semibold">
+                      {rule.title || rule.name || `Rule ${index + 1}`}
+                    </h4>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {rule.description || rule.content || String(rule)}
+                    </p>
+                  </div>
+                ))}
               </div>
 
               <button
-                type="button"
                 onClick={() => setShowHouseRules(false)}
-                className="text-slate-400 hover:text-white"
+                className="mt-6 rounded-lg bg-emerald-800 px-5 py-3 font-semibold text-white"
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-3.5 text-xs text-slate-600 max-h-[60vh] overflow-y-auto">
-              {HOUSE_RULES.map((rule, index) => (
-                <div
-                  key={index}
-                  className="border-b border-slate-100 pb-3 last:border-none last:pb-0"
-                >
-                  <h4 className="font-bold text-slate-900 mb-1">
-                    {rule.title}
-                  </h4>
-
-                  <p className="leading-relaxed">
-                    {rule.text}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <div className="p-4 bg-slate-50 border-t border-slate-200 text-right">
-              <button
-                type="button"
-                onClick={() => setShowHouseRules(false)}
-                className="px-4 py-2 bg-[#12897F] text-white text-xs font-semibold rounded-lg"
-              >
-                Understood & Close
+                Close
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {showMaintenanceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-slate-950/50"
-            onClick={() => setShowMaintenanceModal(false)}
-          />
-
-          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden z-10">
-            <div className="bg-[#0B1D2E] p-5 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Wrench className="w-5 h-5 text-teal-400" />
-
-                <h3 className="font-bold text-sm">
-                  Raise Maintenance Complaint
-                </h3>
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setShowMaintenanceModal(false)
-                }
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
+        {showMaintenanceModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <form
               onSubmit={handleMaintenanceSubmit}
-              className="p-5 space-y-4 text-xs"
+              className="w-full max-w-lg rounded-2xl bg-white p-6"
             >
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Issue Category
-                </label>
-
-                <select
-                  value={maintenanceCategory}
-                  onChange={(event) =>
-                    setMaintenanceCategory(event.target.value)
-                  }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-[#12897F]"
-                >
-                  <option value="Plumbing">
-                    Water Supply, Borehole & Plumbing
-                  </option>
-
-                  <option value="Electrical">
-                    Electrical Wiring & Solar Inverter
-                  </option>
-
-                  <option value="HVAC">
-                    Air Conditioning & Ventilation
-                  </option>
-
-                  <option value="Structural">
-                    Doors, Windows, Perimeter Fence & Gate Lock
-                  </option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Urgency
-                </label>
-
-                <select
-                  value={maintenanceUrgency}
-                  onChange={(event) =>
-                    setMaintenanceUrgency(event.target.value)
-                  }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-[#12897F]"
-                >
-                  <option value="Medium">
-                    Medium (Inspect within 24 hours)
-                  </option>
-
-                  <option value="High">
-                    High (Urgent habitability / facility risk)
-                  </option>
-
-                  <option value="Low">
-                    Low (Routine maintenance)
-                  </option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Description of Issue
-                </label>
-
-                <textarea
-                  rows={3}
-                  required
-                  value={maintenanceDesc}
-                  onChange={(event) =>
-                    setMaintenanceDesc(event.target.value)
-                  }
-                  placeholder="Detail the location on property, nature of breakdown, etc..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-[#12897F]"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="mb-5 flex items-center justify-between">
+                <h3 className="text-xl font-bold">Maintenance Request</h3>
                 <button
                   type="button"
-                  onClick={() =>
-                    setShowMaintenanceModal(false)
-                  }
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+                  onClick={() => setShowMaintenanceModal(false)}
+                  aria-label="Close maintenance form"
                 >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={isSubmittingTicket}
-                  className="px-4 py-2 bg-[#12897F] hover:bg-[#0f766e] text-white rounded-lg font-semibold flex items-center gap-1.5 transition"
-                >
-                  {isSubmittingTicket ? (
-                    <span>Submitting...</span>
-                  ) : (
-                    <>
-                      <Send className="w-3.5 h-3.5" />
-                      <span>Submit Ticket</span>
-                    </>
-                  )}
+                  <X size={22} />
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
 
-      {showPaymentModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-slate-950/50"
-            onClick={() => setShowPaymentModal(false)}
-          />
+              <label className="mb-2 block text-sm font-medium">
+                Issue category
+              </label>
 
-          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden z-10">
-            <div className="bg-[#0B1D2E] p-5 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-teal-400" />
+              <select
+                value={maintenanceCategory}
+                onChange={(event) => setMaintenanceCategory(event.target.value)}
+                className="mb-4 w-full rounded-lg border border-slate-300 p-3"
+              >
+                <option>Plumbing</option>
+                <option>Electrical</option>
+                <option>Structural</option>
+                <option>Security</option>
+                <option>Other</option>
+              </select>
 
-                <h3 className="font-bold text-sm">
-                  Lease Payment Settlement
-                </h3>
-              </div>
+              <label className="mb-2 block text-sm font-medium">
+                Urgency
+              </label>
+
+              <select
+                value={maintenanceUrgency}
+                onChange={(event) => setMaintenanceUrgency(event.target.value)}
+                className="mb-4 w-full rounded-lg border border-slate-300 p-3"
+              >
+                <option>Low</option>
+                <option>Medium</option>
+                <option>High</option>
+                <option>Urgent</option>
+              </select>
+
+              <label className="mb-2 block text-sm font-medium">
+                Describe the issue
+              </label>
+
+              <textarea
+                value={maintenanceDesc}
+                onChange={(event) => setMaintenanceDesc(event.target.value)}
+                rows={4}
+                required
+                className="w-full rounded-lg border border-slate-300 p-3"
+                placeholder="Explain the maintenance issue..."
+              />
 
               <button
-                type="button"
-                onClick={() => setShowPaymentModal(false)}
-                className="text-slate-400 hover:text-white"
+                type="submit"
+                disabled={isSubmittingTicket}
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-800 px-5 py-3 font-semibold text-white disabled:opacity-60"
               >
-                <X className="w-5 h-5" />
+                <Send size={17} />
+                {isSubmittingTicket ? 'Submitting...' : 'Submit Request'}
               </button>
-            </div>
+            </form>
+          </div>
+        )}
 
+        {showPaymentModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <form
               onSubmit={handleExecutePayment}
-              className="p-5 space-y-4 text-xs"
+              className="w-full max-w-lg rounded-2xl bg-white p-6"
             >
-              <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl space-y-1">
-                <div className="text-[11px] font-bold uppercase text-teal-800">
-                  Unit & Tenancy
-                </div>
-
-                <div className="font-bold text-slate-900">
-                  {currentTenant.tenantName}
-                </div>
-
-                <div className="text-slate-600">
-                  {currentTenant.unit} • {currentTenant.property}
-                </div>
-              </div>
-
-              {currentTenant.multiYearEligible && (
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Advance Lease Payment Period
-                  </label>
-
-                  <div className="grid grid-cols-3 gap-2">
-                    {availableAdvanceYears.map((years) => (
-                      <button
-                        key={years}
-                        type="button"
-                        onClick={() => {
-                          setLeaseYears(years);
-
-                          setPaymentAmount(
-                            (currentTenant.amount > 0
-                              ? currentTenant.amount
-                              : 2500000) * years
-                          );
-                        }}
-                        className={`py-2 px-2.5 rounded-lg border text-center transition cursor-pointer ${
-                          effectiveLeaseYears === years
-                            ? 'border-[#12897F] bg-teal-50 text-[#12897F] font-bold'
-                            : 'border-slate-200 text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        {years} Years
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Settlement Amount (₦)
-                </label>
-
-                <input
-                  type="number"
-                  min="0"
-                  value={paymentAmount}
-                  onChange={(event) =>
-                    setPaymentAmount(
-                      Number(event.target.value)
-                    )
-                  }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 font-bold text-slate-900 outline-none focus:ring-2 focus:ring-[#12897F]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1.5">
-                  Payment Method
-                </label>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('CARD')}
-                    className={`p-2.5 rounded-lg border text-left flex items-center gap-2 ${
-                      paymentMethod === 'CARD'
-                        ? 'border-[#12897F] bg-teal-50/50 text-[#12897F] font-semibold'
-                        : 'border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    <CreditCard className="w-4 h-4" />
-                    <span>Card / Paystack</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPaymentMethod('TRANSFER')
-                    }
-                    className={`p-2.5 rounded-lg border text-left flex items-center gap-2 ${
-                      paymentMethod === 'TRANSFER'
-                        ? 'border-[#12897F] bg-teal-50/50 text-[#12897F] font-semibold'
-                        : 'border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    <Building2 className="w-4 h-4" />
-                    <span>Direct Transfer</span>
-                  </button>
-                </div>
-              </div>
-
-              {paymentMethod === 'TRANSFER' && (
-                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-slate-700 text-xs">
-                  <div className="flex items-center gap-1.5 font-bold text-slate-900">
-                    <ShieldCheck className="w-4 h-4 text-[#12897F] shrink-0" />
-                    <span>
-                      Verified Corporate Bank Settlement
-                    </span>
-                  </div>
-
-                  <p className="text-[11px] text-slate-500 leading-relaxed">
-                    To prevent incorrect payment routing and
-                    ensure direct lease matching, corporate
-                    bank account details are generated
-                    specifically by Fugson Finance Desk with
-                    dedicated billing tokens.
-                  </p>
-
-                  <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-[11px] space-y-1">
-                    <div className="flex justify-between gap-3">
-                      <span className="text-slate-500">
-                        Corporate Finance Desk:
-                      </span>
-
-                      <a
-                        href="mailto:finance@fugsonproperties.com"
-                        className="font-semibold text-slate-800 hover:text-[#12897F]"
-                      >
-                        finance@fugsonproperties.com
-                      </a>
-                    </div>
-
-                    <div className="flex justify-between gap-3">
-                      <span className="text-slate-500">
-                        Estate Support Hotline:
-                      </span>
-
-                      <span className="font-semibold text-slate-800">
-                        +234 800 FUGSON
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="text-[10px] text-teal-700 font-medium">
-                    Tip: Use Card / Paystack above for instant
-                    verification and automated digital receipt
-                    delivery.
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="mb-5 flex items-center justify-between">
+                <h3 className="text-xl font-bold">Complete Payment</h3>
                 <button
                   type="button"
-                  onClick={() =>
-                    setShowPaymentModal(false)
-                  }
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+                  onClick={() => setShowPaymentModal(false)}
+                  aria-label="Close payment dialog"
                 >
-                  Cancel
+                  <X size={22} />
+                </button>
+              </div>
+
+              <div className="rounded-xl bg-slate-50 p-4">
+                <p className="text-sm text-slate-500">Tenant</p>
+                <p className="font-semibold">{tenantName}</p>
+
+                <p className="mt-2 text-sm text-slate-500">Property</p>
+                <p className="font-semibold">{tenantProperty}</p>
+
+                {tenantEmail && (
+                  <p className="mt-2 text-sm text-slate-500">{tenantEmail}</p>
+                )}
+              </div>
+
+              <label className="mt-5 block text-sm font-medium">
+                Amount to pay (₦)
+              </label>
+
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={paymentAmount}
+                onChange={(event) => setPaymentAmount(Number(event.target.value))}
+                required
+                className="mt-2 w-full rounded-lg border border-slate-300 p-3"
+              />
+
+              <p className="mt-2 text-xs text-slate-500">
+                The backend must determine and verify the actual amount due.
+                Changing this field does not change the amount charged by Paystack.
+              </p>
+
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('CARD')}
+                  className={`rounded-lg border p-3 text-sm font-semibold ${
+                    paymentMethod === 'CARD'
+                      ? 'border-emerald-800 bg-emerald-50 text-emerald-900'
+                      : 'border-slate-200'
+                  }`}
+                >
+                  <CreditCard className="mx-auto mb-2" size={21} />
+                  Card / Paystack
                 </button>
 
                 <button
-                  type="submit"
-                  disabled={isProcessingPayment}
-                  className="px-4 py-2.5 bg-[#12897F] hover:bg-[#0f766e] text-white rounded-lg font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-70"
+                  type="button"
+                  onClick={() => setPaymentMethod('TRANSFER')}
+                  className={`rounded-lg border p-3 text-sm font-semibold ${
+                    paymentMethod === 'TRANSFER'
+                      ? 'border-emerald-800 bg-emerald-50 text-emerald-900'
+                      : 'border-slate-200'
+                  }`}
                 >
-                  {isProcessingPayment ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                      <span>Confirming Settlement...</span>
-                    </div>
-                  ) : (
-                    <span>
-                      Confirm & Pay {formatNaira(paymentAmount)}
-                    </span>
-                  )}
+                  <Building2 className="mx-auto mb-2" size={21} />
+                  Bank Transfer
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
 
-      {showReceiptModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-slate-950/50"
-            onClick={() => setShowReceiptModal(null)}
-          />
-
-          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden z-10">
-            <div className="bg-[#0B1D2E] p-5 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileCheck className="w-5 h-5 text-teal-400" />
-
-                <h3 className="font-bold text-sm">
-                  Official Tenancy Receipt
-                </h3>
+              <div className="mt-5 flex items-center justify-between border-t border-slate-200 pt-4">
+                <span className="font-medium">Total</span>
+                <span className="text-xl font-bold">
+                  {formatNaira(paymentAmount)}
+                </span>
               </div>
 
               <button
-                type="button"
-                onClick={() => setShowReceiptModal(null)}
-                className="text-slate-400 hover:text-white"
+                type="submit"
+                disabled={isProcessingPayment || paymentAmount <= 0}
+                className="mt-5 w-full rounded-lg bg-emerald-800 px-5 py-3 font-semibold text-white disabled:opacity-60"
               >
-                <X className="w-5 h-5" />
+                {isProcessingPayment
+                  ? 'Processing...'
+                  : paymentMethod === 'CARD'
+                    ? 'Continue to Paystack'
+                    : 'Continue with Transfer'}
               </button>
-            </div>
+            </form>
+          </div>
+        )}
 
-            <div className="p-6 space-y-4 text-xs">
-              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3 font-mono">
-                <div className="flex justify-between border-b border-slate-200 pb-2">
-                  <span className="text-slate-500">
-                    Receipt Ref:
-                  </span>
+        {showReceiptModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-lg rounded-2xl bg-white p-6">
+              <div className="text-center">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-800">
+                  <CheckCircle2 size={30} />
+                </div>
 
-                  <span className="font-bold text-slate-800">
+                <h3 className="mt-4 text-2xl font-bold">Payment Verified</h3>
+
+                <p className="mt-2 text-sm text-slate-500">
+                  Your payment has been confirmed by the payment server.
+                </p>
+              </div>
+
+              <div className="mt-6 space-y-4 rounded-xl border border-slate-200 p-5">
+                <div className="flex justify-between gap-4 text-sm">
+                  <span className="text-slate-500">Receipt reference</span>
+                  <span className="break-all text-right font-semibold">
                     {showReceiptModal}
                   </span>
                 </div>
 
-                <div className="flex justify-between border-b border-slate-200 pb-2">
-                  <span className="text-slate-500">
-                    Tenant:
-                  </span>
+                <div className="flex justify-between gap-4 text-sm">
+                  <span className="text-slate-500">Tenant</span>
+                  <span className="text-right font-semibold">{tenantName}</span>
+                </div>
 
-                  <span className="font-bold text-slate-800">
-                    {currentTenant.tenantName}
+                <div className="flex justify-between gap-4 text-sm">
+                  <span className="text-slate-500">Property</span>
+                  <span className="text-right font-semibold">
+                    {tenantProperty}
                   </span>
                 </div>
 
-                <div className="flex justify-between border-b border-slate-200 pb-2">
-                  <span className="text-slate-500">
-                    Property:
-                  </span>
-
-                  <span className="font-bold text-slate-800">
-                    {currentTenant.property}
-                  </span>
-                </div>
-
-                <div className="flex justify-between border-b border-slate-200 pb-2">
-                  <span className="text-slate-500">
-                    Amount Paid:
-                  </span>
-
-                  <span className="font-bold text-emerald-700">
-                    {formatNaira(
-                      currentTenant.amountPaid ||
-                        currentTenant.amount
-                    )}
-                  </span>
-                </div>
-
-                <div className="flex justify-between">
-                  <span className="text-slate-500">
-                    Status:
-                  </span>
-
-                  <span className="font-bold text-emerald-600 uppercase">
-                    Settled & Cleared
-                  </span>
+                <div className="flex justify-between gap-4 border-t border-slate-200 pt-4">
+                  <span className="font-semibold">Status</span>
+                  <span className="font-bold text-emerald-800">Verified</span>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setShowReceiptModal(null)
-                  }
-                  className="px-3.5 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium text-xs cursor-pointer"
-                >
-                  Close
-                </button>
+              <p className="mt-4 flex items-start gap-2 text-xs text-slate-500">
+                <Mail className="shrink-0" size={16} />
+                Keep this receipt reference for your records. Email delivery
+                depends on the backend receipt-email configuration.
+              </p>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    const email =
-                      currentTenant.tenantEmail ||
-                      `${currentTenant.tenantName
-                        .toLowerCase()
-                        .replace(/\s+/g, '.')}@example.com`;
-
-                    showToast(
-                      `Official statement & receipt ${showReceiptModal} sent to ${email}`
-                    );
-                  }}
-                  className="px-3.5 py-2 text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
-                >
-                  <Mail className="w-3.5 h-3.5 text-[#12897F]" />
-                  <span>Send Statement to my Email</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    showToast(
-                      `Receipt ${showReceiptModal}.pdf downloaded to device.`
-                    );
-
-                    setShowReceiptModal(null);
-                  }}
-                  className="px-4 py-2 bg-[#12897F] hover:bg-[#0f766e] text-white rounded-lg font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download PDF</span>
-                </button>
-              </div>
+              <button
+                onClick={() => setShowReceiptModal(null)}
+                className="mt-6 w-full rounded-lg bg-emerald-800 px-5 py-3 font-semibold text-white"
+              >
+                Done
+              </button>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </main>
   );
 }

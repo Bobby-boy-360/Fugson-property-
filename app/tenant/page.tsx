@@ -2,7 +2,7 @@
 
 import React from 'react';
 import TenantPublicPortal from '@/app/pay/[token]/page';
-import { getCurrentUser } from '@/src/utils/auth';
+import { getCurrentUser } from '@/src/auth';
 
 export default function TenantPage({
   onNavigate,

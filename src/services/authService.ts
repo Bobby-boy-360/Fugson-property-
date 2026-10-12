@@ -43,19 +43,39 @@ function saveRegisteredAccount(account: StoredAccount) {
 export const authService = {
   /**
    * PLUG & PLAY BACKEND ENDPOINT: POST /api/auth/login
+   * Expects { email, password } and returns { id, name, email, role, token, tenantId }
    */
   async login(email: string, password: string): Promise<AuthUser> {
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Check backend API endpoint first
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, password }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const rawRole = String(data.role || 'ADMIN').toUpperCase();
+        const role: UserRole =
+          rawRole === 'ADMIN' ? 'ADMIN' : rawRole === 'AGENT' ? 'AGENT' : 'TENANT';
+        return loginAs(role, data.email || cleanEmail, data.tenantId, data.name);
+      }
+    } catch {
+      // Backend not running locally on same host or fallback to client store
+    }
+
     await delay(200); // simulate network latency
 
-    const cleanEmail = email.trim().toLowerCase();
     const registered = getRegisteredAccounts().find(a => a.email.toLowerCase() === cleanEmail);
 
-    let role: UserRole = registered ? registered.role : 'TENANT';
+    let role: UserRole = registered ? (String(registered.role).toUpperCase() as UserRole) : 'TENANT';
     let name = registered ? registered.name : 'Registered Tenant';
     let tenantId = registered?.tenantId || `fg-tenant-001`;
 
     if (!registered) {
-      if (cleanEmail.includes('admin')) {
+      if (cleanEmail.includes('admin') || cleanEmail === 'deinabohpraise@gmail.com') {
         role = 'ADMIN';
         name = 'Property Administrator';
       } else if (cleanEmail.includes('agent') || cleanEmail.includes('briggs') || cleanEmail.includes('nwosu')) {

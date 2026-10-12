@@ -203,7 +203,7 @@ export default function AdminLayout({
                 className="bg-transparent border-none outline-none w-full text-slate-700 placeholder:text-slate-400 text-xs"
               />
             </div>
-            <span className="hidden md:inline-flex text-xs font-medium text-slate-400 px-2 py-0.5 bg-slate-100 rounded">
+            <span className="hidden md:inline-flex text-xs font-medium text-white px-2 py-0.5 bg-slate-100 rounded">
               Node.js + PostgreSQL on Railway
             </span>
           </div>
